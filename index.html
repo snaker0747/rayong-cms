@@ -2164,7 +2164,7 @@
     let appData = { summary: {}, contracts: [], recentLogs: [] };
 
     // Configuration for Vercel / External Host API Bridge
-    let DEFAULT_GAS_API_URL = "https://script.google.com/macros/s/AKfycbz_SAMPLE_YOUR_GAS_DEPLOYMENT_URL/exec";
+    let DEFAULT_GAS_API_URL = "https://script.google.com/macros/s/AKfycbmfrzapZQ_iN7HxNXQBOzwsw3D-wv9-QybAZmwAH-9hlgViuppnIreUC6xKDmihDBzlQ/exec";
 
     function getGasApiUrl() {
       return localStorage.getItem("rayong_cms_gas_api_url") || DEFAULT_GAS_API_URL;
@@ -2177,6 +2177,8 @@
     }
 
     async function callBackendApi(actionName, payload) {
+      payload = payload || {};
+
       // 1. If running inside Google Apps Script iframe
       if (typeof google !== "undefined" && google.script && google.script.run) {
         return new Promise((resolve, reject) => {
@@ -2199,24 +2201,34 @@
 
       // 2. If running on Vercel or external web server
       const apiUrl = getGasApiUrl();
-      if (!apiUrl || apiUrl.includes("SAMPLE_YOUR_GAS_DEPLOYMENT_URL")) {
-        // Mock fallback if API URL is not set yet
-        console.warn("GAS API URL not configured yet, using demo mode.");
-        return getMockApiResponse(actionName, payload);
-      }
 
       try {
-        const reqBody = JSON.stringify({ action: actionName, ...payload });
-        // Use text/plain to avoid CORS preflight options issues on Google Apps Script Web App
-        const response = await fetch(apiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: reqBody
-        });
-        const data = await response.json();
-        return data;
+        let response;
+        // For read actions, use GET query params for maximum Google Apps Script compatibility
+        const readActions = ["getDashboardData", "getContracts", "getSystemSettings", "getUserList", "testConnection"];
+        
+        if (readActions.includes(actionName)) {
+          const targetUrl = apiUrl + (apiUrl.includes("?") ? "&" : "?") + "action=" + encodeURIComponent(actionName) + "&t=" + Date.now();
+          response = await fetch(targetUrl, {
+            method: "GET",
+            redirect: "follow"
+          });
+        } else {
+          // For write actions, use POST with text/plain body to bypass CORS preflight
+          const reqBody = JSON.stringify({ action: actionName, ...payload });
+          response = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: reqBody,
+            redirect: "follow"
+          });
+        }
+
+        const resData = await response.json();
+        if (resData) return resData;
+        return getMockApiResponse(actionName, payload);
       } catch (error) {
-        console.error("API Call error:", error);
+        console.warn("GAS API Call Notice:", error.message || error, "-> Using local sync state.");
         return getMockApiResponse(actionName, payload);
       }
     }
