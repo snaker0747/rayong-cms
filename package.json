@@ -1,0 +1,17 @@
+{
+  "name": "rayong-cms",
+  "version": "1.0.0",
+  "description": "ระบบบริหารสัญญา ฝ่ายสาธารณูปโภค ส่วนการโยธา สำนักช่าง เทศบาลนครระยอง",
+  "private": true,
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "keywords": [
+    "rayong",
+    "contract-management",
+    "vercel",
+    "gas"
+  ],
+  "author": "ฝ่ายสาธารณูปโภค ส่วนการโยธา สำนักช่าง เทศบาลนครระยอง 2569",
+  "license": "ISC"
+}
