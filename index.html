@@ -3073,7 +3073,7 @@
         }
       });
 
-      const activeContracts = totalContracts - completedContracts;
+      const activeContracts = totalContracts - completedCount;
       const displayTotalMoney = totalBudgetSum > 0 ? totalBudgetSum : (totalContractSum > 0 ? totalContractSum : (sum.totalBudget || sum.totalContractAmount || 0));
       const avgProgress = totalContracts > 0 ? Math.round(totalProgress / totalContracts) : 0;
 
