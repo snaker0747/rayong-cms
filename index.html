@@ -1411,7 +1411,7 @@
                   <th class="text-center">จัดการ</th>
                 </tr>
               </thead>
-              <tbody id="fullProjectTableBody">
+              <tbody id="fullProjectsTableBody">
                 <!-- Populated by JS -->
               </tbody>
             </table>
@@ -2140,16 +2140,64 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content border-0 shadow" style="border-radius: var(--radius-lg);">
         <div class="modal-header border-0 pb-0">
-          <h5 class="modal-title fw-bold" id="modalContractTitle">รายละเอียดโครงการ</h5>
+          <div>
+            <h5 class="modal-title fw-bold text-dark" id="modalProjectName">รายละเอียดโครงการ</h5>
+            <span class="badge bg-light text-dark border mt-1" id="modalContractNo">สัญญา: -</span>
+          </div>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body p-4" id="modalContractBody">
-          <!-- Populated by JS -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="text-muted small">ผู้รับจ้าง</label>
+              <div class="fw-bold text-dark" id="modalContractor">-</div>
+            </div>
+            <div class="col-md-6">
+              <label class="text-muted small">นายช่างผู้ควบคุมงาน</label>
+              <div class="fw-bold text-dark" id="modalEngineer">-</div>
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label class="text-muted small">งบประมาณ / ราคากลาง</label>
+              <div class="fw-bold text-dark" id="modalBudget">฿0.00</div>
+            </div>
+            <div class="col-md-4">
+              <label class="text-muted small">วงเงินสัญญาจ้าง</label>
+              <div class="fw-bold text-success" id="modalContractAmount">฿0.00</div>
+            </div>
+            <div class="col-md-4">
+              <label class="text-muted small">อัตราค่าปรับ</label>
+              <div class="fw-bold text-dark" id="modalPenaltyRate">0.10% ต่อวัน</div>
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label class="text-muted small">วันเริ่มต้นสัญญา</label>
+              <div class="fw-bold text-dark" id="modalStartDate">-</div>
+            </div>
+            <div class="col-md-4">
+              <label class="text-muted small">วันสิ้นสุดสัญญา</label>
+              <div class="fw-bold text-dark" id="modalEndDate">-</div>
+            </div>
+            <div class="col-md-4">
+              <label class="text-muted small">ความคืบหน้าสะสม</label>
+              <div class="fw-bold text-primary" id="modalProgress">0%</div>
+            </div>
+          </div>
+          <div id="modalPenaltyDetails" class="p-3 rounded bg-light border border-danger text-danger mb-2" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <strong><i class="fa-solid fa-triangle-exclamation me-1"></i> แจ้งเตือนสัญญาเกินกำหนด</strong>
+              <span class="badge bg-danger" id="modalOverdueDays">0 วัน</span>
+            </div>
+            <div class="small mb-1">ค่าปรับสะสมโดยประมาณ: <strong id="modalPenaltySum">฿0.00</strong> (<span id="modalPenaltyPercent">0%</span> ของวงเงินสัญญา)</div>
+            <div class="small fw-semibold" id="modalAlertText">-</div>
+          </div>
         </div>
         <div class="modal-footer border-0 bg-light rounded-bottom">
           <button type="button" class="btn btn-sm btn-secondary rounded-pill px-4" data-bs-dismiss="modal">ปิด</button>
-          <button type="button" class="btn btn-sm btn-dark rounded-pill px-4" id="modalBtnQuickAction">
-            <i class="fa-solid fa-camera me-1"></i> บันทึกตรวจงาน
+          <button type="button" class="btn btn-sm btn-dark rounded-pill px-4" onclick="switchSection('dailyLog'); bootstrap.Modal.getInstance(document.getElementById('contractDetailModal')).hide();">
+            <i class="fa-solid fa-camera me-1"></i> ไปหน้าบันทึกตรวจงาน
           </button>
         </div>
       </div>
@@ -3042,23 +3090,41 @@
         else if (isRed) statusBadge = '<span class="figma-badge at-risk">เกินสัญญา (มีค่าปรับ)</span>';
         else if (isYellow) statusBadge = '<span class="figma-badge delayed">ใกล้ครบสัญญา</span>';
 
-        html += '<tr onclick="openDetailModal(' + idx + ')" style="cursor: pointer;">' +
-          '<td><span class="badge bg-light text-dark border">' + escapeHtml(formatContractNoDisplay(c.contractNo)) + '</span></td>' +
-          '<td><strong>' + escapeHtml(c.projectName) + '</strong></td>' +
-          '<td>' + escapeHtml(c.contractor) + '</td>' +
-          '<td>฿' + formatMoney(c.contractAmount) + '</td>' +
-          '<td>' + c.endDate + '</td>' +
-          '<td>' + statusBadge + '</td>' +
+        html += '<tr>' +
+          '<td><span class="badge bg-light text-dark border me-1">' + escapeHtml(formatContractNoDisplay(c.contractNo)) + '</span><div class="fw-bold mt-1">' + escapeHtml(c.projectName) + '</div></td>' +
+          '<td>' + escapeHtml(c.contractor) + '<div class="small text-muted">' + escapeHtml(c.responsibleEngineer || 'ช่างโยธา') + '</div></td>' +
+          '<td class="fw-bold text-dark">฿' + formatMoney(c.contractAmount) + '</td>' +
+          '<td>' + (c.endDate || '-') + '<div class="small text-muted">' + (isRed ? '<span class="text-danger">เกิน ' + c.daysOverdue + ' วัน</span>' : 'เหลือ ' + c.remainingDays + ' วัน') + '</div></td>' +
           '<td>' +
-            '<div class="progress" style="height: 8px; border-radius: 9999px;">' +
+            '<div class="progress" style="height: 8px; border-radius: 9999px; width: 80px;">' +
               '<div class="progress-bar bg-success" style="width: ' + (c.currentProgress || 0) + '%;"></div>' +
             '</div>' +
             '<span style="font-size: 0.72rem; color: #7E7E86;">' + (c.currentProgress || 0) + '%</span>' +
+          '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td class="text-center">' +
+            '<button type="button" class="btn btn-xs btn-outline-dark rounded-pill px-2 py-1 me-1" onclick="openDetailModal(' + idx + ')" title="ดูรายละเอียด">' +
+              '<i class="fa-solid fa-eye"></i>' +
+            '</button>' +
+            '<button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1" onclick="quickLogContract(' + idx + ')" title="บันทึกตรวจงาน">' +
+              '<i class="fa-solid fa-camera"></i>' +
+            '</button>' +
           '</td>' +
         '</tr>';
       });
 
       tbody.innerHTML = html;
+    }
+
+    function quickLogContract(idx) {
+      const c = (appData.contracts || [])[idx];
+      if (!c) return;
+      switchSection('dailyLog');
+      const sel = document.getElementById('logContractNo');
+      if (sel) {
+        sel.value = c.contractNo;
+        onDailyContractSelect(c.contractNo);
+      }
     }
 
     function filterProjectTable() {
