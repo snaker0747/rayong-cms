@@ -1448,7 +1448,7 @@
                 <tr>
                   <th>เลขที่สัญญา / โครงการ</th>
                   <th>ผู้รับจ้าง</th>
-                  <th>วงเงินสัญญา</th>
+                  <th>งบประมาณ</th>
                   <th>ปีงบประมาณ</th>
                   <th>ความคืบหน้า</th>
                   <th>สถานะกำกับสัญญา</th>
@@ -3269,7 +3269,7 @@
         html += '<tr>' +
           '<td><span class="badge bg-light text-dark border me-1">' + escapeHtml(formatContractNoDisplay(c.contractNo)) + '</span><div class="fw-bold mt-1">' + escapeHtml(c.projectName) + '</div></td>' +
           '<td>' + escapeHtml(c.contractor) + '<div class="small text-muted">' + escapeHtml(c.responsibleEngineer || 'ช่างโยธา') + '</div></td>' +
-          '<td class="fw-bold text-dark">฿' + formatMoney(c.contractAmount) + '</td>' +
+          '<td class="fw-bold text-dark">฿' + formatMoney(c.budget || c.contractAmount || 0) + '</td>' +
           '<td><span class="badge bg-light text-dark border px-2 py-1 fw-bold" style="font-size: 0.82rem;">พ.ศ. ' + escapeHtml(c.fiscalYear || '2569') + '</span></td>' +
           '<td>' +
             '<div class="progress" style="height: 8px; border-radius: 9999px; width: 80px;">' +
