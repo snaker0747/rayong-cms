@@ -2135,6 +2135,99 @@
     </div>
   </div>
 
+  
+  <!-- Edit Contract Modal (แก้ไขข้อมูลโครงการ) -->
+  <div class="modal fade" id="editContractModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content border-0 shadow" style="border-radius: var(--radius-lg);">
+        <div class="modal-header border-0 pb-0">
+          <div>
+            <h5 class="modal-title fw-bold text-dark"><i class="fa-solid fa-pen-to-square me-2 text-warning"></i> แก้ไขข้อมูลสัญญาโครงการ</h5>
+            <p class="text-muted small mb-0">ปรับปรุงข้อมูลสัญญาในฐานข้อมูล ContractMaster สำนักช่าง</p>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="editContractForm" onsubmit="submitEditContract(event)">
+          <input type="hidden" id="editOriginalContractNo">
+          <div class="modal-body p-4">
+            <div class="row g-3 mb-3">
+              <div class="col-md-4">
+                <label class="form-label">เลขที่สัญญา <span class="text-danger">*</span></label>
+                <input type="text" id="editContractNo" class="form-control" required>
+              </div>
+              <div class="col-md-8">
+                <label class="form-label">ชื่อโครงการ / งานจ้าง <span class="text-danger">*</span></label>
+                <input type="text" id="editProjectName" class="form-control" required>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">ผู้รับจ้าง (หจก. / บริษัท) <span class="text-danger">*</span></label>
+                <input type="text" id="editContractor" class="form-control" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">นายช่างผู้ควบคุมงาน <span class="text-danger">*</span></label>
+                <input type="text" id="editEngineer" class="form-control" required>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-md-4">
+                <label class="form-label">งบประมาณ / ราคากลาง (บาท) <span class="text-danger">*</span></label>
+                <input type="number" id="editBudget" class="form-control" min="0" step="any" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">วงเงินตามสัญญาจ้าง (บาท) <span class="text-danger">*</span></label>
+                <input type="number" id="editContractAmount" class="form-control" min="0" step="any" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">อัตราค่าปรับต่อวัน</label>
+                <select id="editPenaltyRate" class="form-select">
+                  <option value="0.001">ร้อยละ 0.10 ต่อวัน (งานก่อสร้างทั่วไป)</option>
+                  <option value="0.002">ร้อยละ 0.20 ต่อวัน (งานระบบสำคัญ)</option>
+                  <option value="0.0005">ร้อยละ 0.05 ต่อวัน</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-md-4">
+                <label class="form-label">วันเริ่มต้นสัญญา <span class="text-danger">*</span></label>
+                <input type="date" id="editStartDate" class="form-control" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">วันสิ้นสุดสัญญา <span class="text-danger">*</span></label>
+                <input type="date" id="editEndDate" class="form-control" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">สถานะสัญญา</label>
+                <select id="editStatus" class="form-select">
+                  <option value="Active">กำลังดำเนินการ (Active)</option>
+                  <option value="Completed">ตรวจรับแล้ว (Completed)</option>
+                  <option value="Terminated">บอกเลิกสัญญา (Terminated)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">รหัสอ้างอิงสัญญา</label>
+                <input type="text" id="editContractId" class="form-control bg-light" readonly>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer border-0 bg-light rounded-bottom">
+            <button type="button" class="btn btn-sm btn-secondary rounded-pill px-4" data-bs-dismiss="modal">ยกเลิก</button>
+            <button type="submit" class="btn btn-sm btn-dark rounded-pill px-4 fw-bold">
+              <i class="fa-solid fa-save me-1 text-warning"></i> บันทึกการแก้ไข
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Contract Detail Modal -->
   <div class="modal fade" id="contractDetailModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -2194,11 +2287,21 @@
             <div class="small fw-semibold" id="modalAlertText">-</div>
           </div>
         </div>
-        <div class="modal-footer border-0 bg-light rounded-bottom">
-          <button type="button" class="btn btn-sm btn-secondary rounded-pill px-4" data-bs-dismiss="modal">ปิด</button>
-          <button type="button" class="btn btn-sm btn-dark rounded-pill px-4" onclick="switchSection('dailyLog'); bootstrap.Modal.getInstance(document.getElementById('contractDetailModal')).hide();">
-            <i class="fa-solid fa-camera me-1"></i> ไปหน้าบันทึกตรวจงาน
-          </button>
+        <div class="modal-footer border-0 bg-light rounded-bottom d-flex justify-content-between">
+          <div>
+            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 me-2" id="modalBtnDelete" onclick="deleteFromDetailModal()">
+              <i class="fa-solid fa-trash me-1"></i> ลบโครงการ
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3" id="modalBtnEdit" onclick="editFromDetailModal()">
+              <i class="fa-solid fa-pen-to-square me-1"></i> แก้ไขข้อมูล
+            </button>
+          </div>
+          <div>
+            <button type="button" class="btn btn-sm btn-secondary rounded-pill px-4 me-2" data-bs-dismiss="modal">ปิด</button>
+            <button type="button" class="btn btn-sm btn-dark rounded-pill px-4" onclick="quickLogFromDetailModal()">
+              <i class="fa-solid fa-camera me-1"></i> บันทึกตรวจงาน
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -3102,12 +3205,18 @@
             '<span style="font-size: 0.72rem; color: #7E7E86;">' + (c.currentProgress || 0) + '%</span>' +
           '</td>' +
           '<td>' + statusBadge + '</td>' +
-          '<td class="text-center">' +
+          '<td class="text-center" style="white-space: nowrap;">' +
             '<button type="button" class="btn btn-xs btn-outline-dark rounded-pill px-2 py-1 me-1" onclick="openDetailModal(' + idx + ')" title="ดูรายละเอียด">' +
               '<i class="fa-solid fa-eye"></i>' +
             '</button>' +
-            '<button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1" onclick="quickLogContract(' + idx + ')" title="บันทึกตรวจงาน">' +
+            '<button type="button" class="btn btn-xs btn-outline-warning text-dark rounded-pill px-2 py-1 me-1" onclick="openEditContractModal(' + idx + ')" title="แก้ไขสัญญา">' +
+              '<i class="fa-solid fa-pen-to-square"></i>' +
+            '</button>' +
+            '<button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 me-1" onclick="quickLogContract(' + idx + ')" title="บันทึกตรวจงาน">' +
               '<i class="fa-solid fa-camera"></i>' +
+            '</button>' +
+            '<button type="button" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-1" onclick="confirmDeleteContract(' + idx + ')" title="ลบสัญญา">' +
+              '<i class="fa-solid fa-trash"></i>' +
             '</button>' +
           '</td>' +
         '</tr>';
@@ -3360,6 +3469,7 @@
     }
 
     function openDetailModal(idx) {
+      currentDetailIdx = idx;
       const c = (appData.contracts || [])[idx];
       if (!c) return;
 
@@ -3398,6 +3508,133 @@
       const count = (appData.contracts || []).length + 1;
       document.getElementById("newContractId").value = "CTR-69-" + (count < 10 ? "00" : count < 100 ? "0" : "") + count;
       new bootstrap.Modal(document.getElementById("newContractModal")).show();
+    }
+
+    
+    let currentDetailIdx = -1;
+
+    function openEditContractModal(idx) {
+      const c = (appData.contracts || [])[idx];
+      if (!c) return;
+
+      document.getElementById("editOriginalContractNo").value = c.contractNo;
+      document.getElementById("editContractId").value = c.contractId || "";
+      document.getElementById("editContractNo").value = c.contractNo || "";
+      document.getElementById("editProjectName").value = c.projectName || "";
+      document.getElementById("editContractor").value = c.contractor || "";
+      document.getElementById("editEngineer").value = c.responsibleEngineer || "";
+      document.getElementById("editBudget").value = c.budget || "";
+      document.getElementById("editContractAmount").value = c.contractAmount || "";
+      document.getElementById("editPenaltyRate").value = String(c.penaltyRate || "0.001");
+      document.getElementById("editStartDate").value = c.startDate || "";
+      document.getElementById("editEndDate").value = c.endDate || "";
+      document.getElementById("editStatus").value = c.status || "Active";
+
+      new bootstrap.Modal(document.getElementById("editContractModal")).show();
+    }
+
+    function submitEditContract(e) {
+      e.preventDefault();
+      const formData = {
+        originalContractNo: document.getElementById("editOriginalContractNo").value,
+        contractId: document.getElementById("editContractId").value,
+        contractNo: document.getElementById("editContractNo").value,
+        projectName: document.getElementById("editProjectName").value,
+        contractor: document.getElementById("editContractor").value,
+        budget: document.getElementById("editBudget").value,
+        contractAmount: document.getElementById("editContractAmount").value,
+        penaltyRate: document.getElementById("editPenaltyRate").value,
+        startDate: document.getElementById("editStartDate").value,
+        endDate: document.getElementById("editEndDate").value,
+        responsibleEngineer: document.getElementById("editEngineer").value,
+        status: document.getElementById("editStatus").value
+      };
+
+      showLoading("กำลังบันทึกการแก้ไขสัญญาโครงการ...");
+
+      callBackendApi("updateContract", formData)
+        .then(function(res) {
+          hideLoading();
+          if (res && res.success) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById("editContractModal"));
+            if (modal) modal.hide();
+            Swal.fire({
+              icon: "success",
+              title: "แก้ไขสำเร็จ!",
+              text: res.message || "อัปเดตข้อมูลสัญญาโครงการเรียบร้อยแล้ว",
+              confirmButtonColor: "#121214"
+            }).then(() => {
+              loadInitialData();
+            });
+          } else {
+            Swal.fire("เกิดข้อผิดพลาด", res ? res.message : "ไม่สามารถแก้ไขได้", "error");
+          }
+        })
+        .catch(function(err) {
+          hideLoading();
+          Swal.fire("เกิดข้อผิดพลาด", err.message || err, "error");
+        });
+    }
+
+    function confirmDeleteContract(idx) {
+      const c = (appData.contracts || [])[idx];
+      if (!c) return;
+
+      Swal.fire({
+        title: "ยืนยันการลบโครงการ?",
+        html: '<div class="text-start small">' +
+          '<p class="mb-1"><strong>เลขที่สัญญา:</strong> ' + escapeHtml(formatContractNoDisplay(c.contractNo)) + '</p>' +
+          '<p class="mb-1"><strong>ชื่อโครงการ:</strong> ' + escapeHtml(c.projectName) + '</p>' +
+          '<p class="text-danger mt-2 mb-0"><i class="fa-solid fa-triangle-exclamation me-1"></i> โครงการนี้จะถูกลบออกจากฐานข้อมูล Google Sheets อย่างถาวร</p>' +
+          '</div>',
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "ลบโครงการ",
+        cancelButtonText: "ยกเลิก",
+        confirmButtonColor: "#EF4444"
+      }).then((result) => {
+        if (result.isConfirmed) {
+          showLoading("กำลังลบโครงการสัญญา...");
+          callBackendApi("deleteContract", { contractNo: c.contractNo, contractId: c.contractId })
+            .then(function(res) {
+              hideLoading();
+              if (res && res.success) {
+                Swal.fire({
+                  icon: "success",
+                  title: "ลบโครงการสำเร็จ!",
+                  text: res.message || "ลบโครงการสัญญาเรียบร้อยแล้ว",
+                  confirmButtonColor: "#121214"
+                }).then(() => {
+                  loadInitialData();
+                });
+              } else {
+                Swal.fire("เกิดข้อผิดพลาด", res ? res.message : "ไม่สามารถลบได้", "error");
+              }
+            })
+            .catch(function(err) {
+              hideLoading();
+              Swal.fire("เกิดข้อผิดพลาด", err.message || err, "error");
+            });
+        }
+      });
+    }
+
+    function editFromDetailModal() {
+      const modal = bootstrap.Modal.getInstance(document.getElementById("contractDetailModal"));
+      if (modal) modal.hide();
+      if (currentDetailIdx >= 0) openEditContractModal(currentDetailIdx);
+    }
+
+    function deleteFromDetailModal() {
+      const modal = bootstrap.Modal.getInstance(document.getElementById("contractDetailModal"));
+      if (modal) modal.hide();
+      if (currentDetailIdx >= 0) confirmDeleteContract(currentDetailIdx);
+    }
+
+    function quickLogFromDetailModal() {
+      const modal = bootstrap.Modal.getInstance(document.getElementById("contractDetailModal"));
+      if (modal) modal.hide();
+      if (currentDetailIdx >= 0) quickLogContract(currentDetailIdx);
     }
 
     function submitNewContract(e) {
