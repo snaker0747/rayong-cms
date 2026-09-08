@@ -2465,11 +2465,11 @@
 
         // 1. Fetch contracts
         if (supabaseClient) {
-          const res = await supabaseClient.from("contracts").select("*").order("created_at", { ascending: false });
+          const res = await supabaseClient.from("contracts").select("*").order("contract_id", { ascending: true });
           if (res.error) throw res.error;
           contractsData = res.data || [];
         } else {
-          contractsData = await fetchSupabaseRest("contracts?select=*&order=created_at.desc");
+          contractsData = await fetchSupabaseRest("contracts?select=*&order=contract_id.asc");
         }
 
         // 2. Fetch daily logs
