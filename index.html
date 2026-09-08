@@ -3577,6 +3577,28 @@
       new bootstrap.Modal(document.getElementById("editContractModal")).show();
     }
 
+    
+    // Smooth Toast Notification Helper
+    function showToast(title, icon = 'success') {
+      const Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 2200,
+        timerProgressBar: true,
+        background: '#121214',
+        color: '#FFFFFF',
+        iconColor: icon === 'success' ? '#22C55E' : '#EF4444',
+        customClass: {
+          popup: 'rounded-4 shadow-lg'
+        }
+      });
+      Toast.fire({
+        icon: icon,
+        title: title
+      });
+    }
+
     function submitEditContract(e) {
       e.preventDefault();
       const formData = {
@@ -3595,29 +3617,30 @@
         fiscalYear: document.getElementById("editFiscalYear").value || "2569"
       };
 
-      showLoading("กำลังบันทึกการแก้ไขสัญญาโครงการ...");
+      // 1. Instant close modal without waiting
+      const modal = bootstrap.Modal.getInstance(document.getElementById("editContractModal"));
+      if (modal) modal.hide();
+
+      // 2. Show smooth non-blocking toast
+      showToast("บันทึกการแก้ไขสัญญาสำเร็จ!");
+
+      // 3. Optimistic local update & background sync
+      const targetIdx = (appData.contracts || []).findIndex(c => c.contractNo === formData.originalContractNo || c.contractNo === formData.contractNo);
+      if (targetIdx !== -1) {
+        appData.contracts[targetIdx] = { ...appData.contracts[targetIdx], ...formData };
+        renderFigmaUI(appData);
+      }
 
       callBackendApi("updateContract", formData)
         .then(function(res) {
-          hideLoading();
           if (res && res.success) {
-            const modal = bootstrap.Modal.getInstance(document.getElementById("editContractModal"));
-            if (modal) modal.hide();
-            Swal.fire({
-              icon: "success",
-              title: "แก้ไขสำเร็จ!",
-              text: res.message || "อัปเดตข้อมูลสัญญาโครงการเรียบร้อยแล้ว",
-              confirmButtonColor: "#121214"
-            }).then(() => {
-              loadInitialData();
-            });
+            loadInitialData();
           } else {
-            Swal.fire("เกิดข้อผิดพลาด", res ? res.message : "ไม่สามารถแก้ไขได้", "error");
+            showToast("เกิดข้อผิดพลาดในการบันทึก: " + (res ? res.message : ""), "error");
           }
         })
         .catch(function(err) {
-          hideLoading();
-          Swal.fire("เกิดข้อผิดพลาด", err.message || err, "error");
+          showToast("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้", "error");
         });
     }
 
@@ -3639,26 +3662,19 @@
         confirmButtonColor: "#EF4444"
       }).then((result) => {
         if (result.isConfirmed) {
-          showLoading("กำลังลบโครงการสัญญา...");
+          showToast("ลบโครงการสัญญาเรียบร้อยแล้ว");
+          // Optimistic local deletion
+          appData.contracts = (appData.contracts || []).filter(item => item.contractNo !== c.contractNo);
+          renderFigmaUI(appData);
+
           callBackendApi("deleteContract", { contractNo: c.contractNo, contractId: c.contractId })
             .then(function(res) {
-              hideLoading();
               if (res && res.success) {
-                Swal.fire({
-                  icon: "success",
-                  title: "ลบโครงการสำเร็จ!",
-                  text: res.message || "ลบโครงการสัญญาเรียบร้อยแล้ว",
-                  confirmButtonColor: "#121214"
-                }).then(() => {
-                  loadInitialData();
-                });
-              } else {
-                Swal.fire("เกิดข้อผิดพลาด", res ? res.message : "ไม่สามารถลบได้", "error");
+                loadInitialData();
               }
             })
             .catch(function(err) {
-              hideLoading();
-              Swal.fire("เกิดข้อผิดพลาด", err.message || err, "error");
+              showToast("เกิดข้อผิดพลาดในการลบ", "error");
             });
         }
       });
@@ -3699,29 +3715,34 @@
         fiscalYear: (document.getElementById("newFiscalYear") ? document.getElementById("newFiscalYear").value : "2569") || "2569"
       };
 
-      showLoading("กำลังบันทึกข้อมูลสัญญาโครงการใหม่...");
+      // 1. Instant close modal without waiting
+      const modal = bootstrap.Modal.getInstance(document.getElementById("newContractModal"));
+      if (modal) modal.hide();
+
+      // 2. Show smooth non-blocking toast
+      showToast("เพิ่มโครงการสัญญาใหม่สำเร็จ!");
+
+      // 3. Optimistic local update & background sync
+      if (!appData.contracts) appData.contracts = [];
+      appData.contracts.push({
+        ...formData,
+        currentProgress: 0,
+        trafficStatus: formData.status === "Completed" ? "COMPLETED" : "GREEN",
+        daysOverdue: 0,
+        penaltyAmount: 0
+      });
+      renderFigmaUI(appData);
 
       callBackendApi("saveNewContract", formData)
         .then(function(res) {
-          hideLoading();
           if (res && res.success) {
-            const modal = bootstrap.Modal.getInstance(document.getElementById("newContractModal"));
-            if (modal) modal.hide();
-            Swal.fire({
-              icon: "success",
-              title: "เพิ่มโครงการสำเร็จ!",
-              text: res.message + (res.contractNo ? " (สัญญาเลขที่: " + res.contractNo + ")" : ""),
-              confirmButtonColor: "#121214"
-            }).then(() => {
-              loadInitialData();
-            });
+            loadInitialData();
           } else {
-            Swal.fire("เกิดข้อผิดพลาด", res ? res.message : "ไม่สามารถบันทึกได้", "error");
+            showToast("เกิดข้อผิดพลาดในการบันทึก: " + (res ? res.message : ""), "error");
           }
         })
         .catch(function(err) {
-          hideLoading();
-          Swal.fire("เกิดข้อผิดพลาด", err.message || err, "error");
+          showToast("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้", "error");
         });
     }
 
