@@ -899,6 +899,35 @@
       }
     }
 
+    
+    /* Modal Rounded Corners & Clean Layout */
+    .modal-dialog {
+      margin: 1.75rem auto;
+    }
+    .modal-content {
+      border-radius: 24px !important;
+      overflow: hidden !important;
+      border: 1px solid rgba(0, 0, 0, 0.08) !important;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25) !important;
+      background: #FFFFFF !important;
+    }
+    .modal-header {
+      padding: 24px 28px 12px 28px !important;
+      border-top-left-radius: 24px !important;
+      border-top-right-radius: 24px !important;
+      background: #FFFFFF !important;
+    }
+    .modal-body {
+      padding: 16px 28px 24px 28px !important;
+    }
+    .modal-footer {
+      padding: 16px 28px 20px 28px !important;
+      border-bottom-left-radius: 24px !important;
+      border-bottom-right-radius: 24px !important;
+      background: #FAF8F5 !important;
+      border-top: 1px solid #F0ECE6 !important;
+    }
+
     /* Loading Overlay */
     .loading-overlay {
       display: none;
@@ -2100,23 +2129,27 @@
             </div>
 
             <div class="row g-3 mb-3">
-              <div class="col-md-6">
+              <div class="col-md-4">
                 <label class="form-label">วันเริ่มต้นสัญญา</label>
                 <input type="date" id="newStartDate" class="form-control">
               </div>
-              <div class="col-md-6">
+              <div class="col-md-4">
                 <label class="form-label">วันสิ้นสุดสัญญา</label>
                 <input type="date" id="newEndDate" class="form-control">
               </div>
-            </div>
-
-            <div class="row g-3">
-              <div class="col-md-6">
+              <div class="col-md-4">
                 <label class="form-label">สถานะเริ่มต้น</label>
                 <select id="newStatus" class="form-select">
                   <option value="Active">🟢 กำลังดำเนินการ (Active)</option>
                   <option value="Completed">🔵 ตรวจรับแล้ว (Completed)</option>
                 </select>
+              </div>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">ปีงบประมาณ (พ.ศ.)</label>
+                <input type="text" id="newFiscalYear" class="form-control" placeholder="เช่น 2569" value="2569">
               </div>
               <div class="col-md-6">
                 <label class="form-label">รหัสอ้างอิงสัญญา (อัตโนมัติ)</label>
@@ -2212,6 +2245,10 @@
 
             <div class="row g-3">
               <div class="col-md-6">
+                <label class="form-label">ปีงบประมาณ (พ.ศ.)</label>
+                <input type="text" id="editFiscalYear" class="form-control" placeholder="เช่น 2569" value="2569">
+              </div>
+              <div class="col-md-6">
                 <label class="form-label">รหัสอ้างอิงสัญญา</label>
                 <input type="text" id="editContractId" class="form-control bg-light" readonly>
               </div>
@@ -2241,15 +2278,20 @@
         </div>
         <div class="modal-body p-4" id="modalContractBody">
           <div class="row g-3 mb-3">
-            <div class="col-md-6">
+            <div class="col-md-4">
+              <label class="text-muted small">ปีงบประมาณ</label>
+              <div class="fw-bold text-dark" id="modalFiscalYear">พ.ศ. 2569</div>
+            </div>
+            <div class="col-md-4">
               <label class="text-muted small">ผู้รับจ้าง</label>
               <div class="fw-bold text-dark" id="modalContractor">-</div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
               <label class="text-muted small">นายช่างผู้ควบคุมงาน</label>
               <div class="fw-bold text-dark" id="modalEngineer">-</div>
             </div>
           </div>
+          <div class="row g-3 mb-3">
           <div class="row g-3 mb-3">
             <div class="col-md-4">
               <label class="text-muted small">งบประมาณ / ราคากลาง</label>
@@ -3479,6 +3521,7 @@
       document.getElementById("modalEngineer").innerText = c.responsibleEngineer || "-";
       document.getElementById("modalBudget").innerText = "฿" + formatMoney(c.budget);
       document.getElementById("modalContractAmount").innerText = "฿" + formatMoney(c.contractAmount);
+      if (document.getElementById("modalFiscalYear")) document.getElementById("modalFiscalYear").innerText = "พ.ศ. " + (c.fiscalYear || "2569");
       document.getElementById("modalPenaltyRate").innerText = (c.penaltyRate ? (c.penaltyRate * 100).toFixed(2) : "0.10") + "% ต่อวัน";
       document.getElementById("modalStartDate").innerText = c.startDate;
       document.getElementById("modalEndDate").innerText = c.endDate;
@@ -3529,6 +3572,7 @@
       document.getElementById("editStartDate").value = c.startDate || "";
       document.getElementById("editEndDate").value = c.endDate || "";
       document.getElementById("editStatus").value = c.status || "Active";
+      document.getElementById("editFiscalYear").value = c.fiscalYear || "2569";
 
       new bootstrap.Modal(document.getElementById("editContractModal")).show();
     }
@@ -3547,7 +3591,8 @@
         startDate: document.getElementById("editStartDate").value,
         endDate: document.getElementById("editEndDate").value,
         responsibleEngineer: document.getElementById("editEngineer").value,
-        status: document.getElementById("editStatus").value
+        status: document.getElementById("editStatus").value,
+        fiscalYear: document.getElementById("editFiscalYear").value || "2569"
       };
 
       showLoading("กำลังบันทึกการแก้ไขสัญญาโครงการ...");
@@ -3650,7 +3695,8 @@
         startDate: document.getElementById("newStartDate").value,
         endDate: document.getElementById("newEndDate").value,
         responsibleEngineer: document.getElementById("newEngineer").value,
-        status: document.getElementById("newStatus").value
+        status: document.getElementById("newStatus").value,
+        fiscalYear: (document.getElementById("newFiscalYear") ? document.getElementById("newFiscalYear").value : "2569") || "2569"
       };
 
       showLoading("กำลังบันทึกข้อมูลสัญญาโครงการใหม่...");
