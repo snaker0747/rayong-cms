@@ -2181,15 +2181,15 @@
         const cbName = "gas_cb_" + Math.round(100000 * Math.random());
         window[cbName] = function(data) {
           delete window[cbName];
-          if (script.parentNode) script.parentNode.removeChild(script);
+          if (script && script.parentNode) script.parentNode.removeChild(script);
           resolve(data);
         };
         const script = document.createElement("script");
         script.src = url + (url.includes("?") ? "&" : "?") + "callback=" + cbName;
-        script.onerror = function() {
+        script.onerror = function(err) {
           delete window[cbName];
-          if (script.parentNode) script.parentNode.removeChild(script);
-          reject(new Error("JSONP request failed"));
+          if (script && script.parentNode) script.parentNode.removeChild(script);
+          reject(new Error("JSONP request failed: " + (err.message || "Network Error")));
         };
         document.head.appendChild(script);
       });
@@ -2242,15 +2242,32 @@
 
         } else {
           // For write actions (POST)
-          const reqBody = JSON.stringify({ action: actionName, ...payload });
-          const response = await fetch(apiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: reqBody,
-            redirect: "follow"
-          });
-          const resData = await response.json();
-          if (resData) return resData;
+          try {
+            const reqBody = JSON.stringify({ action: actionName, ...payload });
+            const response = await fetch(apiUrl, {
+              method: "POST",
+              headers: { "Content-Type": "text/plain;charset=utf-8" },
+              body: reqBody,
+              redirect: "follow"
+            });
+            const resData = await response.json();
+            if (resData) return resData;
+          } catch(postErr) {
+            console.log("POST fetch failed, attempting GET/JSONP fallback for write action...", postErr);
+          }
+
+          // Fallback for write actions without large files via GET URL params
+          if (!payload.photoBase64) {
+            const queryParts = ["action=" + encodeURIComponent(actionName)];
+            for (let key in payload) {
+              if (payload[key] !== undefined && payload[key] !== null) {
+                queryParts.push(encodeURIComponent(key) + "=" + encodeURIComponent(payload[key]));
+              }
+            }
+            const fallbackUrl = apiUrl + (apiUrl.includes("?") ? "&" : "?") + queryParts.join("&");
+            const fallbackData = await callJsonp(fallbackUrl);
+            if (fallbackData) return fallbackData;
+          }
         }
 
         return getMockApiResponse(actionName, payload);
