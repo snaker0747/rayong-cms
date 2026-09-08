@@ -3,6 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- Instant Zero-Flicker Session Check -->
+  <script>
+    (function() {
+      try {
+        if (localStorage.getItem("rayong_cms_current_user")) {
+          document.documentElement.classList.add("is-logged-in");
+        }
+      } catch(e) {}
+    })();
+  </script>
   <title>Promage - ระบบบริหารสัญญา เทศบาลนครระยอง</title>
   
   <!-- Google Fonts: Inter & Plus Jakarta Sans & Prompt -->
@@ -18,6 +28,11 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.6/dist/sweetalert2.min.css">
   
   <style>
+        /* Zero-Flicker Login State */
+    html.is-logged-in #loginScreenOverlay {
+      display: none !important;
+    }
+
     :root {
       --bg-page: #F5F1EB;
       --sidebar-bg: #0E0E10;
@@ -2524,15 +2539,24 @@
       if (session) {
         try {
           currentUser = JSON.parse(session);
+          document.documentElement.classList.add("is-logged-in");
           applyCurrentUserUI();
-          document.getElementById("loginScreenOverlay").style.display = "none";
+          const overlay = document.getElementById("loginScreenOverlay");
+          if (overlay) overlay.style.display = "none";
           if (document.getElementById("setGasApiUrl")) document.getElementById("setGasApiUrl").value = getGasApiUrl();
+          
+          const lastSection = sessionStorage.getItem("rayong_cms_active_section") || "dashboard";
+          switchSection(lastSection);
           loadInitialData();
           return;
-        } catch(e) {}
+        } catch(e) {
+          console.error("Session parse error", e);
+        }
       }
       // Show login overlay if not signed in
-      document.getElementById("loginScreenOverlay").style.display = "flex";
+      document.documentElement.classList.remove("is-logged-in");
+      const overlay = document.getElementById("loginScreenOverlay");
+      if (overlay) overlay.style.display = "flex";
     }
 
     function quickFillLogin(u, p) {
@@ -2572,6 +2596,7 @@
           if (res && res.success) {
             currentUser = res.user;
             localStorage.setItem("rayong_cms_current_user", JSON.stringify(currentUser));
+            document.documentElement.classList.add("is-logged-in");
             applyCurrentUserUI();
 
             document.getElementById("loginProgressBar").style.width = "90%";
@@ -2588,6 +2613,8 @@
                 overlay.style.opacity = "1";
                 document.getElementById("loginFormContainer").style.display = "block";
                 document.getElementById("loginLoadingState").style.display = "none";
+                const lastSection = sessionStorage.getItem("rayong_cms_active_section") || "dashboard";
+                switchSection(lastSection);
                 loadInitialData();
               }, 500);
             }, 600);
@@ -2654,10 +2681,13 @@
       }).then((result) => {
         if (result.isConfirmed) {
           localStorage.removeItem("rayong_cms_current_user");
+          sessionStorage.removeItem("rayong_cms_active_section");
+          document.documentElement.classList.remove("is-logged-in");
           currentUser = null;
           const modal = bootstrap.Modal.getInstance(document.getElementById("userProfileModal"));
           if (modal) modal.hide();
-          document.getElementById("loginScreenOverlay").style.display = "flex";
+          const overlay = document.getElementById("loginScreenOverlay");
+          if (overlay) overlay.style.display = "flex";
           document.getElementById("loginPassword").value = "";
         }
       });
@@ -3083,6 +3113,7 @@
     }
 
     function switchSection(sectionId) {
+      sessionStorage.setItem("rayong_cms_active_section", sectionId);
       // Hide all sections
       document.querySelectorAll(".content-section").forEach(function(sec) {
         sec.style.display = "none";
@@ -4019,6 +4050,13 @@
           }
         ]
       };
+    }
+
+    // Auto Initialize Session on Page Load
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+      checkAuthSession();
+    } else {
+      window.addEventListener("DOMContentLoaded", checkAuthSession);
     }
   </script>
 </body>
