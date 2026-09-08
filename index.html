@@ -549,40 +549,47 @@
     .figma-badge.at-risk { background: #FEE2E2; color: #B91C1C; }
     .figma-badge.on-going { background: #FFEDD5; color: #C2410C; }
 
-    /* Circular Progress Gauge in Table */
-    .circle-progress-box {
+    /* Circular Progress Gauge in Table (Zero-Black-Fill) */
+    .circular-progress-box, .circle-progress-box {
       width: 38px;
       height: 38px;
       position: relative;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
     }
 
-    .circle-progress-box svg {
+    .circular-progress-box svg, .circle-progress-box svg, .circular-svg {
       transform: rotate(-90deg);
       width: 38px;
       height: 38px;
+      overflow: visible;
     }
 
-    .circle-progress-box .circle-bg {
-      fill: none;
-      stroke: #EBE6DF;
-      stroke-width: 4;
+    .circular-progress-box circle, .circle-progress-box circle {
+      fill: none !important;
     }
 
-    .circle-progress-box .circle-bar {
-      fill: none;
-      stroke-width: 4;
-      stroke-linecap: round;
+    .circular-progress-box .circular-bg, .circle-progress-box .circle-bg, circle.circular-bg {
+      fill: none !important;
+      stroke: #EBE6DF !important;
+      stroke-width: 4 !important;
+    }
+
+    .circular-progress-box .circular-bar, .circle-progress-box .circle-bar, circle.circular-bar {
+      fill: none !important;
+      stroke: #10B981 !important;
+      stroke-width: 4 !important;
+      stroke-linecap: round !important;
       transition: stroke-dashoffset 0.6s ease;
     }
 
-    .circle-progress-box .circle-text {
+    .circular-progress-box .circular-text, .circle-progress-box .circle-text, span.circular-text {
       position: absolute;
-      font-size: 0.65rem;
+      font-size: 0.68rem;
       font-weight: 700;
       color: var(--text-dark);
+      line-height: 1;
     }
 
     /* Speedometer Overall Progress Gauge */
@@ -1448,7 +1455,7 @@
                 <tr>
                   <th>เลขที่สัญญา / โครงการ</th>
                   <th>ผู้รับจ้าง</th>
-                  <th>งบประมาณ</th>
+                  <th>งบประมาณ/ราคากลาง</th>
                   <th>ปีงบประมาณ</th>
                   <th>ความคืบหน้า</th>
                   <th>สถานะกำกับสัญญา</th>
@@ -3002,39 +3009,98 @@
 
     function renderFigmaUI(data) {
       appData = data || getMockData();
-      const sum = appData.summary || {};
       const contracts = appData.contracts || [];
+      const sum = appData.summary || {};
+
+      // Dynamic calculation across all contracts for 100% synchronized Dashboard
+      const totalContracts = contracts.length;
+      let totalBudgetSum = 0;
+      let totalContractSum = 0;
+      let greenCount = 0;
+      let yellowCount = 0;
+      let redCount = 0;
+      let completedCount = 0;
+      let totalProgress = 0;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      contracts.forEach(c => {
+        const b = Number(c.budget) || 0;
+        const a = Number(c.contractAmount) || 0;
+        totalBudgetSum += b;
+        totalContractSum += a;
+
+        const pVal = Number(c.currentProgress) || 0;
+        totalProgress += pVal;
+
+        // Auto evaluate overdue & traffic status if not supplied
+        if (!c.trafficStatus || c.trafficStatus === "GREEN" || c.trafficStatus === "Active") {
+          if (c.endDate) {
+            const parts = String(c.endDate).split("-");
+            if (parts.length === 3) {
+              const endD = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+              const diffTime = endD.getTime() - today.getTime();
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              c.remainingDays = diffDays;
+              if (diffDays < 0) {
+                c.daysOverdue = Math.abs(diffDays);
+                c.trafficStatus = "RED";
+                const baseMoney = (a > 0) ? a : b;
+                const rate = Number(c.penaltyRate) || 0.001;
+                c.penaltyAmount = baseMoney * rate * c.daysOverdue;
+                c.penaltyPercent = baseMoney > 0 ? (c.penaltyAmount / baseMoney) * 100 : 0;
+                c.alertMessage = "สิ้นสุดสัญญาแล้ว เกินกำหนด " + c.daysOverdue + " วัน";
+              } else if (diffDays <= 15) {
+                c.trafficStatus = "YELLOW";
+                c.daysOverdue = 0;
+                c.alertMessage = "ใกล้ครบสัญญา เหลืออีก " + diffDays + " วัน";
+              } else {
+                c.trafficStatus = "GREEN";
+                c.daysOverdue = 0;
+                c.alertMessage = "การดำเนินงานเป็นไปตามแผน";
+              }
+            }
+          }
+        }
+
+        if (c.status === "Completed" || c.trafficStatus === "COMPLETED") {
+          completedCount++;
+        } else {
+          if (c.trafficStatus === "RED" || c.daysOverdue > 0) redCount++;
+          else if (c.trafficStatus === "YELLOW") yellowCount++;
+          else greenCount++;
+        }
+      });
+
+      const activeContracts = totalContracts - completedContracts;
+      const displayTotalMoney = totalBudgetSum > 0 ? totalBudgetSum : (totalContractSum > 0 ? totalContractSum : (sum.totalBudget || sum.totalContractAmount || 0));
+      const avgProgress = totalContracts > 0 ? Math.round(totalProgress / totalContracts) : 0;
 
       // 1. KPI 4 Cards
-      if (document.getElementById("kpiTotalRevenue")) document.getElementById("kpiTotalRevenue").innerText = "฿" + formatMoney(sum.totalContractAmount || 0);
-      if (document.getElementById("kpiActiveProjects")) document.getElementById("kpiActiveProjects").innerText = sum.activeContracts || 0;
-      if (document.getElementById("kpiTotalProjectsSub")) document.getElementById("kpiTotalProjectsSub").innerText = "/" + (sum.totalContracts || 0);
-      if (document.getElementById("kpiCompletedSubtext")) document.getElementById("kpiCompletedSubtext").innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>ตรวจรับแล้ว ' + (sum.completedContracts || 0) + ' โครงการ</span>';
-      if (document.getElementById("kpiGreenCount")) document.getElementById("kpiGreenCount").innerText = sum.greenCount || 0;
-      if (document.getElementById("kpiRedCount")) document.getElementById("kpiRedCount").innerText = sum.redCount || 0;
-      if (document.getElementById("kpiYellowSubtext")) document.getElementById("kpiYellowSubtext").innerHTML = '<i class="fa-solid fa-bell"></i> <span>ใกล้ครบสัญญา ' + (sum.yellowCount || 0) + ' โครงการ</span>';
+      if (document.getElementById("kpiTotalRevenue")) document.getElementById("kpiTotalRevenue").innerText = "฿" + formatMoney(displayTotalMoney);
+      if (document.getElementById("kpiActiveProjects")) document.getElementById("kpiActiveProjects").innerText = activeContracts;
+      if (document.getElementById("kpiTotalProjectsSub")) document.getElementById("kpiTotalProjectsSub").innerText = "/" + totalContracts;
+      if (document.getElementById("kpiCompletedSubtext")) document.getElementById("kpiCompletedSubtext").innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>ตรวจรับแล้ว ' + completedCount + ' โครงการ</span>';
+      if (document.getElementById("kpiGreenCount")) document.getElementById("kpiGreenCount").innerText = greenCount;
+      if (document.getElementById("kpiRedCount")) document.getElementById("kpiRedCount").innerText = redCount;
+      if (document.getElementById("kpiYellowSubtext")) document.getElementById("kpiYellowSubtext").innerHTML = '<i class="fa-solid fa-bell"></i> <span>ใกล้ครบสัญญา ' + yellowCount + ' โครงการ</span>';
 
       if (document.getElementById("bellRedDot")) {
-        document.getElementById("bellRedDot").style.display = (sum.redCount > 0) ? "block" : "none";
+        document.getElementById("bellRedDot").style.display = (redCount > 0) ? "block" : "none";
       }
 
       // 2. Speedometer Gauge & Stats
-      let avgProgress = 0;
-      if (contracts.length > 0) {
-        const totalP = contracts.reduce((acc, c) => acc + (Number(c.currentProgress) || 0), 0);
-        avgProgress = Math.round(totalP / contracts.length);
-      }
       if (document.getElementById("gaugePercentage")) document.getElementById("gaugePercentage").innerText = avgProgress + "%";
-      
       const offset = 251.2 - (251.2 * (avgProgress / 100));
       if (document.getElementById("gaugeProgressArc")) document.getElementById("gaugeProgressArc").setAttribute("stroke-dashoffset", offset);
 
-      if (document.getElementById("statTotalProjects")) document.getElementById("statTotalProjects").innerText = sum.totalContracts || 0;
-      if (document.getElementById("statCompleted")) document.getElementById("statCompleted").innerText = sum.completedContracts || 0;
-      if (document.getElementById("statDelayed")) document.getElementById("statDelayed").innerText = sum.yellowCount || 0;
-      if (document.getElementById("statOnGoing")) document.getElementById("statOnGoing").innerText = (sum.greenCount + sum.redCount) || 0;
+      if (document.getElementById("statTotalProjects")) document.getElementById("statTotalProjects").innerText = totalContracts;
+      if (document.getElementById("statCompleted")) document.getElementById("statCompleted").innerText = completedCount;
+      if (document.getElementById("statDelayed")) document.getElementById("statDelayed").innerText = yellowCount;
+      if (document.getElementById("statOnGoing")) document.getElementById("statOnGoing").innerText = greenCount;
 
-      // 3. Populate Dropdowns
+      // 3. Populate Dropdowns in Daily Logs & Inspections
       populateDropdowns(contracts);
 
       // 4. Render Project Summary Table
@@ -3207,7 +3273,7 @@
         html += '<tr onclick="openDetailModal(' + idx + ')" style="cursor: pointer;">' +
           '<td>' +
             '<div class="fw-bold text-dark text-truncate" style="max-width: 220px;">' + escapeHtml(c.projectName) + '</div>' +
-            '<div class="text-muted" style="font-size: 0.72rem;">สัญญา: ' + escapeHtml(formatContractNoDisplay(c.contractNo)) + '</div>' +
+            '<div class="text-muted" style="font-size: 0.72rem;">สัญญา: ' + escapeHtml(formatContractNoDisplay(c.contractNo)) + ' | ฿' + formatMoney(c.budget || c.contractAmount) + '</div>' +
           '</td>' +
           '<td>' +
             '<div class="small fw-semibold text-dark">' + escapeHtml(c.responsibleEngineer || 'ช่างโยธา') + '</div>' +
