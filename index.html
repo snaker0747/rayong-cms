@@ -2380,11 +2380,16 @@
   <script>
     let appData = { summary: {}, contracts: [], recentLogs: [] };
 
-    // Configuration for Vercel / External Host API Bridge
-    let DEFAULT_GAS_API_URL = "https://script.google.com/macros/s/AKfycbmfrzapZQ_iN7HxNXQBOzwsw3D-wv9-QybAZmwAH-9hlgViuppnIreUC6xKDmihDBzlQ/exec";
+    // Configuration for Vercel / External Host API Bridge (Google Drive & Apps Script)
+    let DEFAULT_GAS_API_URL = "https://script.google.com/macros/s/AKfycbys1b9OIe_d58EuyT8s3hfDvO0FQ4YBLhBPe7UD2mIZfzFNNYILHOiUNmvxgYf-d6CGSA/exec";
 
     function getGasApiUrl() {
-      return localStorage.getItem("rayong_cms_gas_api_url") || DEFAULT_GAS_API_URL;
+      const stored = localStorage.getItem("rayong_cms_gas_api_url");
+      if (!stored || stored.includes("AKfycbmfrzapZQ_iN7HxNXQBOzwsw3D-wv9-QybAZmwAH-9hlgViuppnIreUC6xKDmihDBzlQ")) {
+        localStorage.setItem("rayong_cms_gas_api_url", DEFAULT_GAS_API_URL);
+        return DEFAULT_GAS_API_URL;
+      }
+      return stored;
     }
 
     function setGasApiUrl(url) {
@@ -2429,6 +2434,49 @@
       }
     } catch (e) {
       console.warn("Supabase SDK init notice:", e);
+    }
+
+    
+    // Upload image to Google Drive via Google Apps Script (saving Supabase storage quota!)
+    async function uploadPhotoToGoogleDrive(photoBase64, contractNo) {
+      if (!photoBase64 || photoBase64.length < 50) return "";
+      const apiUrl = getGasApiUrl();
+      if (!apiUrl || !apiUrl.startsWith("http")) return "";
+
+      try {
+        const reqBody = JSON.stringify({
+          action: "uploadPhoto",
+          photoBase64: photoBase64,
+          contractNo: contractNo || "General"
+        });
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: reqBody,
+          redirect: "follow"
+        });
+        const resData = await res.json();
+        if (resData && resData.photoUrl && resData.photoUrl.startsWith("http")) {
+          return resData.photoUrl;
+        }
+      } catch (postErr) {
+        console.warn("GAS Drive uploadPhoto error, attempting fallback saveDailyLog...", postErr);
+        try {
+          const fbRes = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ action: "saveDailyLog", photoBase64: photoBase64, contractNo: contractNo }),
+            redirect: "follow"
+          });
+          const fbData = await fbRes.json();
+          if (fbData && fbData.photoUrl && fbData.photoUrl.startsWith("http")) {
+            return fbData.photoUrl;
+          }
+        } catch (fbErr) {
+          console.error("Failed to upload to Google Drive:", fbErr);
+        }
+      }
+      return "";
     }
 
     // Direct Supabase REST fetch helper (bulletproof fallback even if CDN is blocked)
@@ -2669,6 +2717,19 @@
         }
 
       } else if (actionName === "saveDailyLog") {
+        let photoUrl = "";
+        
+        // 1. If photo is attached, upload to Google Drive to keep Supabase 100% lightweight & free!
+        if (payload.photoBase64 && payload.photoBase64.length > 50) {
+          try {
+            showLoading("กำลังอัปโหลดรูปภาพไปยัง Google Drive เทศบาล...");
+            photoUrl = await uploadPhotoToGoogleDrive(payload.photoBase64, payload.contractNo);
+          } catch(e) {
+            console.warn("Notice: Google Drive upload error:", e);
+          }
+        }
+
+        // 2. Save log record to Supabase (stores only clean Google Drive link, saving database quota!)
         const logRow = {
           log_id: "LOG-" + Date.now(),
           contract_no: payload.contractNo,
@@ -2679,17 +2740,17 @@
           progress_percent: Number(payload.progressPercent || 0),
           issues: payload.issues || "-",
           solution: payload.solution || "-",
-          photo_url: payload.photoBase64 || "",
+          photo_url: photoUrl,
           location_gps: payload.locationGPS || "",
           inspector_name: payload.inspectorName || ""
         };
         if (supabaseClient) {
           const res = await supabaseClient.from("daily_logs").insert([logRow]).select();
           if (res.error) throw res.error;
-          return { success: true };
+          return { success: true, photoUrl: photoUrl };
         } else {
           await fetchSupabaseRest("daily_logs", "POST", logRow);
-          return { success: true };
+          return { success: true, photoUrl: photoUrl };
         }
 
       } else if (actionName === "testConnection") {
