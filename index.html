@@ -2624,16 +2624,18 @@
     // Upload a single image to Google Drive via Google Apps Script (saving Supabase storage quota!)
     async function uploadSinglePhotoToGoogleDrive(photoBase64, contractNo) {
       if (!photoBase64 || photoBase64.length < 50) return "";
-      const apiUrl = getGasApiUrl();
-      if (!apiUrl || !apiUrl.startsWith("http")) return "";
+      let apiUrl = getGasApiUrl();
+      if (!apiUrl || !apiUrl.startsWith("http")) {
+        apiUrl = DEFAULT_GAS_API_URL;
+      }
 
-      try {
+      async function attemptUpload(targetUrl) {
         const reqBody = JSON.stringify({
           action: "uploadPhoto",
           photoBase64: photoBase64,
           contractNo: contractNo || "General"
         });
-        const res = await fetch(apiUrl, {
+        const res = await fetch(targetUrl, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: reqBody,
@@ -2643,24 +2645,27 @@
         if (resData && resData.photoUrl && resData.photoUrl.startsWith("http")) {
           return resData.photoUrl;
         }
-      } catch (postErr) {
-        console.warn("GAS Drive uploadPhoto error, attempting fallback saveDailyLog...", postErr);
-        try {
-          const fbRes = await fetch(apiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify({ action: "saveDailyLog", photoBase64: photoBase64, contractNo: contractNo }),
-            redirect: "follow"
-          });
-          const fbData = await fbRes.json();
-          if (fbData && fbData.photoUrl && fbData.photoUrl.startsWith("http")) {
-            return fbData.photoUrl;
-          }
-        } catch (fbErr) {
-          console.error("Failed to upload to Google Drive:", fbErr);
-        }
+        return "";
       }
-      return "";
+
+      try {
+        let url = await attemptUpload(apiUrl);
+        if (!url && apiUrl !== DEFAULT_GAS_API_URL && DEFAULT_GAS_API_URL) {
+          console.log("Custom GAS failed for uploadPhoto, falling back to default GAS...");
+          url = await attemptUpload(DEFAULT_GAS_API_URL);
+        }
+        return url;
+      } catch (postErr) {
+        console.warn("GAS Drive uploadPhoto error, attempting fallback...", postErr);
+        if (apiUrl !== DEFAULT_GAS_API_URL && DEFAULT_GAS_API_URL) {
+          try {
+            return await attemptUpload(DEFAULT_GAS_API_URL);
+          } catch (e2) {
+            console.error("Default GAS also failed:", e2);
+          }
+        }
+        return "";
+      }
     }
 
     // Alias for single photo upload compatibility
@@ -3037,8 +3042,12 @@
           try {
             showLoading("กำลังอัปโหลดรูปภาพไปยัง Google Drive เทศบาล...");
             photoUrl = await uploadSinglePhotoToGoogleDrive(payload.photoBase64, payload.contractNo);
+            if (!photoUrl) {
+              photoUrl = payload.photoBase64;
+            }
           } catch(e) {
             console.warn("Notice: Google Drive upload error:", e);
+            photoUrl = payload.photoBase64;
           }
         }
 
@@ -3699,10 +3708,18 @@
         }
       }
 
-      // Format photo URLs to store in Supabase (stores clean JSON array of URLs)
+      // Format photo URLs to store in Supabase:
+      // If Drive upload succeeded, use the Drive URLs.
+      // If Drive upload failed or returned empty, use compressed base64 data URLs as resilient fallback!
       let photoUrlToSave = "";
       if (uploadedPhotoUrls.length > 0) {
         photoUrlToSave = JSON.stringify(uploadedPhotoUrls);
+      } else if (currentStagedPhotos && currentStagedPhotos.length > 0) {
+        const fallbackBase64List = currentStagedPhotos.map(p => p.base64).filter(b => b && b.length > 50);
+        if (fallbackBase64List.length > 0) {
+          photoUrlToSave = JSON.stringify(fallbackBase64List);
+          console.log("Drive upload returned 0 URLs; using compressed base64 fallback (" + fallbackBase64List.length + " photos)");
+        }
       }
 
       const formData = {
