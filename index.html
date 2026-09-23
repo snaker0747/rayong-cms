@@ -2455,7 +2455,6 @@
             </div>
           </div>
           <div class="row g-3 mb-3">
-          <div class="row g-3 mb-3">
             <div class="col-md-4">
               <label class="text-muted small">งบประมาณ / ราคากลาง</label>
               <div class="fw-bold text-dark" id="modalBudget">฿0.00</div>
@@ -2513,7 +2512,7 @@
   </div>
 
   <!-- Daily Log Photo Gallery Modal -->
-  <div class="modal fade" id="dailyLogPhotoGalleryModal" tabindex="-1" aria-hidden="true">
+  <div class="modal fade" id="dailyLogPhotoGalleryModal" tabindex="-1" aria-hidden="true" style="z-index: 1065;">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
         <div class="modal-header border-0 pb-0 pt-3 px-4">
@@ -2528,7 +2527,8 @@
         <div class="modal-body px-4 py-3">
           <!-- Main Display -->
           <div class="position-relative text-center bg-black rounded-4 overflow-hidden d-flex align-items-center justify-content-center" style="min-height: 380px; max-height: 520px;">
-            <img id="galleryMainImage" src="" alt="ภาพตรวจงาน" class="img-fluid" style="max-height: 500px; object-fit: contain; transition: 0.2s;">
+            <div id="galleryLoadingSpinner" class="spinner-border text-warning position-absolute" style="display: none; z-index: 5;" role="status"></div>
+            <img id="galleryMainImage" src="" alt="ภาพตรวจงาน" class="img-fluid" style="max-height: 500px; object-fit: contain; transition: 0.2s; cursor: pointer;" title="คลิกเพื่อเปิดดูภาพขนาดเต็มในแท็บใหม่" onclick="window.open(this.src, '_blank')" onload="const sp=document.getElementById('galleryLoadingSpinner'); if(sp) sp.style.display='none';" onerror="const sp=document.getElementById('galleryLoadingSpinner'); if(sp) sp.style.display='none';">
             <!-- Nav buttons -->
             <button type="button" class="btn btn-dark btn-sm rounded-circle position-absolute start-0 top-50 translate-middle-y ms-3 opacity-75 hover-opacity-100" id="galleryPrevBtn" onclick="galleryPrevPhoto()" style="width: 42px; height: 42px;">
               <i class="fa-solid fa-chevron-left"></i>
@@ -4356,7 +4356,7 @@
           const isMultiple = photos.length > 1;
           const icon = isMultiple ? "fa-images" : "fa-image";
           const countBadge = isMultiple ? ' <span class="badge bg-secondary rounded-pill ms-1">' + photos.length + '</span>' : '';
-          photoBtn = '<button type="button" class="btn btn-xs btn-outline-dark rounded-pill py-0 px-2" onclick="openPhotoGalleryModal(' + index + ')" title="คลิกเพื่อดูรูปภาพตรวจงานทั้งหมด">' +
+          photoBtn = '<button type="button" class="btn btn-xs btn-outline-dark rounded-pill py-0 px-2" onclick="openPhotoGalleryModal(' + index + ', \'' + escapeHtml(log.logId || '') + '\')" title="คลิกเพื่อดูรูปภาพตรวจงานทั้งหมด">' +
             '<i class="fa-solid ' + icon + ' me-1 text-warning"></i> รูปภาพ' + countBadge +
           '</button>';
         }
@@ -4393,12 +4393,24 @@
     let currentGalleryPhotos = [];
     let currentGalleryIdx = 0;
 
-    function openPhotoGalleryModal(logIndex) {
-      const log = (appData.recentLogs || [])[logIndex];
-      if (!log) return;
+    function openPhotoGalleryModal(logIndex, logId) {
+      let log = null;
+      if (logId) {
+        log = (appData.recentLogs || []).find(l => String(l.logId) === String(logId));
+      }
+      if (!log && logIndex !== undefined && logIndex !== null) {
+        log = (appData.recentLogs || [])[logIndex];
+      }
+      if (!log) {
+        console.warn("Daily log not found for index:", logIndex, "logId:", logId);
+        return;
+      }
 
       const photos = parsePhotoUrls(log.photoUrl);
-      if (photos.length === 0) return;
+      if (photos.length === 0) {
+        Swal.fire("แจ้งเตือน", "รายงานนี้ไม่มีรูปภาพที่บันทึกไว้", "info");
+        return;
+      }
 
       currentGalleryPhotos = photos;
       currentGalleryIdx = 0;
@@ -4412,8 +4424,19 @@
 
       const modalEl = document.getElementById("dailyLogPhotoGalleryModal");
       if (modalEl) {
-        const modal = new bootstrap.Modal(modalEl);
-        modal.show();
+        try {
+          const modal = (window.bootstrap && bootstrap.Modal) ? 
+            (bootstrap.Modal.getOrCreateInstance ? bootstrap.Modal.getOrCreateInstance(modalEl) : (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl))) :
+            null;
+          if (modal) {
+            modal.show();
+          } else {
+            if (photos[0]) window.open(photos[0], '_blank');
+          }
+        } catch (err) {
+          console.error("Modal open error:", err);
+          if (photos[0]) window.open(photos[0], '_blank');
+        }
       }
     }
 
@@ -4429,7 +4452,9 @@
       const prevBtn = document.getElementById("galleryPrevBtn");
       const nextBtn = document.getElementById("galleryNextBtn");
       const strip = document.getElementById("galleryThumbnailsStrip");
+      const spinner = document.getElementById("galleryLoadingSpinner");
 
+      if (spinner) spinner.style.display = "inline-block";
       if (mainImg) mainImg.src = currentUrl;
       if (counter) counter.innerText = (currentGalleryIdx + 1) + " / " + currentGalleryPhotos.length;
       if (extLink) extLink.href = currentUrl;
@@ -4473,6 +4498,17 @@
       currentGalleryIdx = idx;
       updateGalleryView();
     }
+
+    // Keyboard navigation (Arrow keys) when gallery modal is open
+    document.addEventListener("keydown", function(e) {
+      const modalEl = document.getElementById("dailyLogPhotoGalleryModal");
+      if (!modalEl || !modalEl.classList.contains("show")) return;
+      if (e.key === "ArrowLeft") {
+        galleryPrevPhoto();
+      } else if (e.key === "ArrowRight") {
+        galleryNextPhoto();
+      }
+    });
 
     // ==========================================
     // 3.2 DELETE DAILY LOG & CASCADE DRIVE DELETE
