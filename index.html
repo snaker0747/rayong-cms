@@ -2683,14 +2683,13 @@
     // Delete photos from Google Drive via Google Apps Script (cascade delete to free up quota)
     async function deletePhotosFromGoogleDrive(fileIds) {
       if (!fileIds || fileIds.length === 0) return { success: true, deletedCount: 0 };
-      const apiUrl = getGasApiUrl();
+      let apiUrl = getGasApiUrl();
       if (!apiUrl || !apiUrl.startsWith("http")) {
-        console.warn("No GAS API URL configured for Drive deletion");
-        return { success: false, message: "No GAS API URL" };
+        apiUrl = DEFAULT_GAS_API_URL;
       }
 
-      try {
-        const res = await fetch(apiUrl, {
+      async function attemptDelete(targetUrl) {
+        const res = await fetch(targetUrl, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
@@ -2699,10 +2698,25 @@
           }),
           redirect: "follow"
         });
-        const data = await res.json();
+        return await res.json();
+      }
+
+      try {
+        let data = await attemptDelete(apiUrl);
+        if ((!data || data.success === false) && apiUrl !== DEFAULT_GAS_API_URL && DEFAULT_GAS_API_URL) {
+          console.log("Custom GAS failed, falling back to default GAS for Drive delete...");
+          data = await attemptDelete(DEFAULT_GAS_API_URL);
+        }
         return data;
       } catch(err) {
         console.warn("Error deleting files from Google Drive:", err);
+        if (apiUrl !== DEFAULT_GAS_API_URL && DEFAULT_GAS_API_URL) {
+          try {
+            return await attemptDelete(DEFAULT_GAS_API_URL);
+          } catch(e2) {
+            return { success: false, error: e2.message };
+          }
+        }
         return { success: false, error: err.message };
       }
     }
@@ -3024,15 +3038,33 @@
         }
 
       } else if (actionName === "deleteDailyLog") {
-        const targetLogId = payload.logId || payload.id;
-        if (!targetLogId) throw new Error("ไม่พบรหัส logId ที่ต้องการลบ");
+        const targetLogId = payload.logId;
+        const targetDbId = payload.id;
+        if (!targetLogId && !targetDbId) throw new Error("ไม่พบรหัสรายงานที่ต้องการลบ");
+
+        const isUuid = (str) => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
         if (supabaseClient) {
-          const res = await supabaseClient.from("daily_logs").delete().or("log_id.eq." + targetLogId + ",id.eq." + targetLogId);
-          if (res.error) throw res.error;
+          let res = null;
+          // 1. Delete by UUID primary key if valid UUID
+          if (targetDbId && isUuid(targetDbId)) {
+            res = await supabaseClient.from("daily_logs").delete().eq("id", targetDbId.trim());
+          } else if (targetLogId && isUuid(targetLogId)) {
+            res = await supabaseClient.from("daily_logs").delete().eq("id", targetLogId.trim());
+          }
+          // 2. Delete by log_id text column
+          if ((!res || res.error) && targetLogId) {
+            res = await supabaseClient.from("daily_logs").delete().eq("log_id", targetLogId.trim());
+          }
+          if (res && res.error) throw res.error;
           return { success: true };
         } else {
-          await fetchSupabaseRest("daily_logs?log_id=eq." + encodeURIComponent(targetLogId), "DELETE");
+          // REST API fallback
+          if (targetDbId && isUuid(targetDbId)) {
+            await fetchSupabaseRest("daily_logs?id=eq." + encodeURIComponent(targetDbId.trim()), "DELETE");
+          } else if (targetLogId) {
+            await fetchSupabaseRest("daily_logs?log_id=eq." + encodeURIComponent(targetLogId.trim()), "DELETE");
+          }
           return { success: true };
         }
 
@@ -4581,7 +4613,9 @@
 
         if (res && res.success) {
           // Optimistically update memory
-          appData.recentLogs = (appData.recentLogs || []).filter(item => item.logId !== log.logId);
+          appData.recentLogs = (appData.recentLogs || []).filter(item => 
+            item.logId !== log.logId && (!log.dbId || item.dbId !== log.dbId)
+          );
           renderHistoryLogs(appData.recentLogs);
           renderFigmaUI(appData);
 
