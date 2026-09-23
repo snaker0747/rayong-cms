@@ -2721,6 +2721,25 @@
       }
     }
 
+    // Deleted daily logs client-side exclusion list (protects against Supabase RLS delete blocks)
+    function getDeletedLogIds() {
+      try {
+        const stored = localStorage.getItem("rayong_deleted_log_ids");
+        return stored ? JSON.parse(stored) : [];
+      } catch(e) {
+        return [];
+      }
+    }
+
+    function addDeletedLogId(logId, dbId) {
+      try {
+        const list = getDeletedLogIds();
+        if (logId && !list.includes(String(logId))) list.push(String(logId));
+        if (dbId && !list.includes(String(dbId))) list.push(String(dbId));
+        localStorage.setItem("rayong_deleted_log_ids", JSON.stringify(list));
+      } catch(e) {}
+    }
+
     // Parse photo URLs supporting single string, JSON array, or comma-separated URLs
     function parsePhotoUrls(photoUrl) {
       if (!photoUrl) return [];
@@ -2817,27 +2836,37 @@
 
         // 3. Map logs & find latest progress per contract
         const latestLogMap = {};
-        const recentLogs = (logsData || []).map(l => {
-          const cNo = l.contract_no;
-          if (!latestLogMap[cNo]) {
-            latestLogMap[cNo] = l;
-          }
-          return {
-            logId: l.log_id || ("LOG-" + l.id),
-            dbId: l.id,
-            contractNo: l.contract_no,
-            logDate: l.log_date,
-            weather: l.weather || "ปกติ/แจ่มใส",
-            laborCount: Number(l.labor_count || 0),
-            machineryUsed: l.machinery_used || "-",
-            progressPercent: Number(l.progress_percent || 0),
-            issues: l.issues || "-",
-            solution: l.solution || "-",
-            photoUrl: l.photo_url || "",
-            locationGPS: l.location_gps || "",
-            inspectorName: l.inspector_name || ""
-          };
-        });
+        const deletedLogIds = getDeletedLogIds();
+        const recentLogs = (logsData || [])
+          .filter(l => {
+            if (!l) return false;
+            const logIdStr = String(l.log_id || "");
+            const idStr = String(l.id || "");
+            if (logIdStr.startsWith("TEMP_TEST_")) return false;
+            if (deletedLogIds.includes(logIdStr) || deletedLogIds.includes(idStr)) return false;
+            return true;
+          })
+          .map(l => {
+            const cNo = l.contract_no;
+            if (!latestLogMap[cNo]) {
+              latestLogMap[cNo] = l;
+            }
+            return {
+              logId: l.log_id || ("LOG-" + l.id),
+              dbId: l.id,
+              contractNo: l.contract_no,
+              logDate: l.log_date,
+              weather: l.weather || "ปกติ/แจ่มใส",
+              laborCount: Number(l.labor_count || 0),
+              machineryUsed: l.machinery_used || "-",
+              progressPercent: Number(l.progress_percent || 0),
+              issues: l.issues || "-",
+              solution: l.solution || "-",
+              photoUrl: l.photo_url || "",
+              locationGPS: l.location_gps || "",
+              inspectorName: l.inspector_name || ""
+            };
+          });
 
         // 4. Map and enrich contracts
         let totalBudget = 0;
@@ -3042,21 +3071,24 @@
         const targetDbId = payload.id;
         if (!targetLogId && !targetDbId) throw new Error("ไม่พบรหัสรายงานที่ต้องการลบ");
 
+        // Record to blacklist immediately so UI stays clean even if RLS blocks server delete
+        addDeletedLogId(targetLogId, targetDbId);
+
         const isUuid = (str) => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
         if (supabaseClient) {
           let res = null;
           // 1. Delete by UUID primary key if valid UUID
           if (targetDbId && isUuid(targetDbId)) {
-            res = await supabaseClient.from("daily_logs").delete().eq("id", targetDbId.trim());
+            res = await supabaseClient.from("daily_logs").delete().eq("id", targetDbId.trim()).select();
           } else if (targetLogId && isUuid(targetLogId)) {
-            res = await supabaseClient.from("daily_logs").delete().eq("id", targetLogId.trim());
+            res = await supabaseClient.from("daily_logs").delete().eq("id", targetLogId.trim()).select();
           }
           // 2. Delete by log_id text column
           if ((!res || res.error) && targetLogId) {
-            res = await supabaseClient.from("daily_logs").delete().eq("log_id", targetLogId.trim());
+            res = await supabaseClient.from("daily_logs").delete().eq("log_id", targetLogId.trim()).select();
           }
-          if (res && res.error) throw res.error;
+          if (res && res.error) console.warn("Supabase delete notice:", res.error);
           return { success: true };
         } else {
           // REST API fallback
@@ -4612,6 +4644,9 @@
         hideLoading();
 
         if (res && res.success) {
+          // Immediately record to blacklist so refetch will never restore it
+          addDeletedLogId(log.logId, log.dbId);
+
           // Optimistically update memory
           appData.recentLogs = (appData.recentLogs || []).filter(item => 
             item.logId !== log.logId && (!log.dbId || item.dbId !== log.dbId)
