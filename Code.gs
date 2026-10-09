@@ -244,78 +244,124 @@ function saveSystemSettings(settings) {
  * รองรับทั้งการเปิดผ่าน Google Apps Script และ Vercel.app
  * ==========================================
  */
-function doGet(e) {
-  // หากมีการส่ง Query parameter action (เช่น action=getDashboardData) ให้ตอบกลับเป็น JSON REST API
-  if (e && e.parameter && e.parameter.action) {
-    const action = e.parameter.action;
-    let result = { success: false, message: "Unknown action" };
+function processApiRequest(e, isPost) {
+  let result = { success: false, message: "No action specified" };
 
-    try {
-      if (action === "getDashboardData") {
-        result = getDashboardData();
-      } else if (action === "getContracts") {
-        result = { success: true, contracts: getContracts() };
-      } else if (action === "getSystemSettings") {
-        result = getSystemSettings();
-      } else if (action === "getUserList") {
-        result = getUserList();
-      } else if (action === "testConnection") {
-        result = { success: true, message: "เชื่อมต่อ Google Apps Script API สำเร็จ 100%" };
+  try {
+    let params = {};
+    if (isPost) {
+      if (e && e.postData && e.postData.contents) {
+        try {
+          params = JSON.parse(e.postData.contents);
+        } catch(err) {
+          params = e.parameter || {};
+        }
+      } else if (e && e.parameter) {
+        params = e.parameter;
       }
-    } catch (err) {
-      result = { success: false, message: err.message };
+    } else {
+      params = (e && e.parameter) ? e.parameter : {};
     }
 
-    return ContentService.createTextOutput(JSON.stringify(result))
+    const action = params.action || (e && e.parameter && e.parameter.action);
+
+    if (action === "getDashboardData") {
+      result = getDashboardData();
+    } else if (action === "getContracts") {
+      result = { success: true, contracts: getContracts() };
+    } else if (action === "getSystemSettings") {
+      result = getSystemSettings();
+    } else if (action === "getUserList") {
+      result = getUserList();
+    } else if (action === "loginUser") {
+      result = loginUser(params.username, params.password);
+    } else if (action === "saveNewContract") {
+      result = saveNewContract(params.formData || params);
+    } else if (action === "updateContract") {
+      result = updateContract(params.formData || params);
+    } else if (action === "deleteContract") {
+      result = deleteContract(params.formData || params);
+    } else if (action === "uploadPhoto") {
+      result = handleUploadPhoto(params);
+    } else if (action === "deletePhoto" || action === "deletePhotos") {
+      result = handleDeletePhotos(params);
+    } else if (action === "deleteDailyLog") {
+      result = deleteDailyLog(params.formData || params);
+    } else if (action === "saveDailyLog") {
+      result = saveDailyLog(params.formData || params);
+    } else if (action === "saveInspection") {
+      result = saveInspection(params.formData || params);
+    } else if (action === "saveUserAccount") {
+      result = saveUserAccount(params.formData || params);
+    } else if (action === "saveSystemSettings") {
+      result = saveSystemSettings(params.settings || params);
+    } else if (action === "testConnection") {
+      result = { success: true, message: "เชื่อมต่อ Google Apps Script API และฐานข้อมูลสำเร็จ 100%" };
+    } else {
+      result = { success: false, message: "Unknown action: " + action };
+    }
+  } catch (err) {
+    result = { success: false, message: "Error processing API request: " + err.message };
+  }
+
+  return result;
+}
+
+function doGet(e) {
+  // 1. หากมีการเรียก API (มี parameter action หรือ callback)
+  if (e && e.parameter && (e.parameter.action || e.parameter.callback)) {
+    const result = processApiRequest(e, false);
+    const callback = e.parameter.callback;
+
+    let outputText = JSON.stringify(result);
+    if (callback) {
+      outputText = callback + "(" + outputText + ");";
+      return ContentService.createTextOutput(outputText)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    return ContentService.createTextOutput(outputText)
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // กรณีเปิดเว็บตรงผ่าน Google Apps Script
-  const template = HtmlService.createTemplateFromFile("Index");
-  return template.evaluate()
-    .setTitle("ระบบบริหารสัญญา - เทศบาลนครระยอง")
-    .addMetaTag("viewport", "width=device-width, initial-scale=1, shrink-to-fit=no")
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  // 2. กรณีเปิดหน้าเว็บตรงใน Google Apps Script
+  try {
+    let template;
+    try {
+      template = HtmlService.createTemplateFromFile("index");
+    } catch(err1) {
+      template = HtmlService.createTemplateFromFile("Index");
+    }
+    return template.evaluate()
+      .setTitle("ระบบบริหารสัญญา - เทศบาลนครระยอง")
+      .addMetaTag("viewport", "width=device-width, initial-scale=1, shrink-to-fit=no")
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  } catch(err2) {
+    // หากยังไม่ได้สร้างไฟล์ HTML ใน Apps Script ให้แสดงหน้า Landing Page เชื่อมต่อ
+    const htmlOutput = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<title>ระบบบริหารสัญญา - เทศบาลนครระยอง</title>' +
+      '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">' +
+      '<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">' +
+      '<style>body{background:#0E0E10;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;margin:0;padding:20px;}' +
+      '.card-box{background:#1A1A1E;border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:36px;max-width:520px;text-align:center;box-shadow:0 20px 40px rgba(0,0,0,0.5);}' +
+      '.btn-launch{background:#FF5B26;color:#fff;border:none;padding:14px 28px;border-radius:9999px;font-weight:700;font-size:16px;text-decoration:none;display:inline-block;margin-top:20px;transition:0.2s;}' +
+      '.btn-launch:hover{background:#e04815;color:#fff;transform:scale(1.03);}' +
+      '</style></head><body>' +
+      '<div class="card-box">' +
+      '<div style="width:64px;height:64px;border-radius:18px;background:rgba(255,91,38,0.15);color:#FF5B26;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 20px;"><i class="fa-solid fa-server"></i></div>' +
+      '<h4 class="fw-bold mb-2">Google Apps Script API พร้อมทำงาน</h4>' +
+      '<p class="text-muted small mb-4">ระบบบริหารสัญญา ฝ่ายสาธารณูปโภค ส่วนการโยธา สำนักช่าง เทศบาลนครระยอง เชื่อมต่อกับ Google Sheets เรียบร้อยแล้ว</p>' +
+      '<a href="https://rayong-cms.vercel.app" class="btn-launch"><i class="fa-solid fa-arrow-up-right-from-square me-2"></i> เปิดใช้งานระบบบน Vercel</a>' +
+      '</div></body></html>';
+    return HtmlService.createHtmlOutput(htmlOutput)
+      .setTitle("ระบบบริหารสัญญา - เทศบาลนครระยอง")
+      .addMetaTag("viewport", "width=device-width, initial-scale=1, shrink-to-fit=no")
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
 }
 
 function doPost(e) {
-  let result = { success: false, message: "No data received" };
-
-  try {
-    let postData = {};
-    if (e && e.postData && e.postData.contents) {
-      postData = JSON.parse(e.postData.contents);
-    } else if (e && e.parameter) {
-      postData = e.parameter;
-    }
-
-    const action = postData.action || (e && e.parameter && e.parameter.action);
-
-    if (action === "loginUser") {
-      result = loginUser(postData.username, postData.password);
-    } else if (action === "getDashboardData") {
-      result = getDashboardData();
-    } else if (action === "saveDailyLog") {
-      result = saveDailyLog(postData.formData || postData);
-    } else if (action === "saveInspection") {
-      result = saveInspection(postData.formData || postData);
-    } else if (action === "saveNewContract") {
-      result = saveNewContract(postData.formData || postData);
-    } else if (action === "saveUserAccount") {
-      result = saveUserAccount(postData.formData || postData);
-    } else if (action === "saveSystemSettings") {
-      result = saveSystemSettings(postData.settings || postData);
-    } else if (action === "getUserList") {
-      result = getUserList();
-    } else if (action === "testConnection") {
-      result = { success: true, message: "เชื่อมต่อระบบ API และฐานข้อมูลสำเร็จ 100%" };
-    } else {
-      result = { success: false, message: "Action ไม่ถูกต้อง: " + action };
-    }
-  } catch (err) {
-    result = { success: false, message: "เกิดข้อผิดพลาดในการประมวลผล: " + err.message };
-  }
-
+  const result = processApiRequest(e, true);
   return ContentService.createTextOutput(JSON.stringify(result))
     .setMimeType(ContentService.MimeType.JSON);
 }
@@ -355,7 +401,8 @@ function getContracts() {
         startDate: formatDate(row[7]),
         endDate: formatDate(row[8]),
         status: String(row[9] || "Active"),
-        responsibleEngineer: String(row[10] || "")
+        responsibleEngineer: String(row[10] || ""),
+        fiscalYear: String(row[11] || "2569")
       });
     }
 
@@ -420,8 +467,8 @@ function getDashboardData() {
     let completedCount = 0;
 
     const enrichedContracts = contracts.map(function(contract) {
-      totalBudget += contract.budget;
-      totalContractAmount += contract.contractAmount;
+      totalBudget += Number(contract.budget || 0);
+      totalContractAmount += Number(contract.contractAmount || 0);
 
       const progressInfo = latestProgressMap[contract.contractNo] || { progressPercent: 0, lastLogDate: "-" };
       contract.currentProgress = progressInfo.progressPercent;
@@ -512,9 +559,10 @@ function calculatePenaltyAndStatus(contract, compareDate) {
 
   if (diffDays < 0) {
     daysOverdue = Math.abs(diffDays);
+    const baseMoney = (contract.contractAmount > 0) ? contract.contractAmount : Number(contract.budget || 0);
     const rate = contract.penaltyRate > 0 ? contract.penaltyRate : 0.001;
-    penaltyAmount = contract.contractAmount * rate * daysOverdue;
-    penaltyPercent = contract.contractAmount > 0 ? (penaltyAmount / contract.contractAmount) * 100 : 0;
+    penaltyAmount = baseMoney * rate * daysOverdue;
+    penaltyPercent = baseMoney > 0 ? (penaltyAmount / baseMoney) * 100 : 0;
 
     if (penaltyPercent >= 10) {
       trafficStatus = "RED";
@@ -664,6 +712,27 @@ function saveInspection(formData) {
  * 7. ฟังก์ชันอัปโหลดรูปภาพลง Google Drive
  * ==========================================
  */
+
+function handleUploadPhoto(params) {
+  try {
+    const base64Data = params.photoBase64 || params.base64Data || "";
+    if (!base64Data || base64Data.length < 50) {
+      return { success: false, message: "ไม่มีข้อมูลรูปภาพ" };
+    }
+    const rawContract = String(params.contractNo || "General");
+    const cleanContract = rawContract.replace(/[^a-zA-Z0-9_฀-๿]/g, "_");
+    const timeStr = Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyyMMdd_HHmmss");
+    const fileName = "DailyLog_" + cleanContract + "_" + timeStr + ".jpg";
+    const photoUrl = uploadImageToDrive(base64Data, fileName);
+    if (!photoUrl || photoUrl.startsWith("Error")) {
+      return { success: false, message: photoUrl || "ไม่สามารถอัปโหลดไปยัง Google Drive ได้" };
+    }
+    return { success: true, photoUrl: photoUrl };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
 function uploadImageToDrive(base64Data, filename) {
   try {
     let folder;
@@ -690,11 +759,100 @@ function uploadImageToDrive(base64Data, filename) {
     const file = folder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
-    const fileUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
+    const fileUrl = "https://lh3.googleusercontent.com/d/" + file.getId();
     return fileUrl;
   } catch (error) {
     Logger.log("Error in uploadImageToDrive: " + error.message);
     return "Error uploading image: " + error.message;
+  }
+}
+
+/**
+ * ==========================================
+ * 7.0.1 ฟังก์ชันลบรูปภาพจาก Google Drive (คืนพื้นที่ว่างอัตโนมัติ)
+ * ==========================================
+ */
+function handleDeletePhotos(params) {
+  try {
+    let fileIds = [];
+    if (params.fileIds && Array.isArray(params.fileIds)) {
+      fileIds = params.fileIds;
+    } else if (params.fileId) {
+      fileIds = [params.fileId];
+    } else if (params.photoUrls) {
+      const urls = Array.isArray(params.photoUrls) ? params.photoUrls : [params.photoUrls];
+      urls.forEach(function(u) {
+        const id = extractDriveFileId(u);
+        if (id) fileIds.push(id);
+      });
+    } else if (params.photoUrl) {
+      const id = extractDriveFileId(params.photoUrl);
+      if (id) fileIds.push(id);
+    }
+
+    const deletedIds = [];
+    const errors = [];
+
+    fileIds.forEach(function(rawId) {
+      if (!rawId || typeof rawId !== "string") return;
+      const cleanId = rawId.trim();
+      try {
+        const file = DriveApp.getFileById(cleanId);
+        file.setTrashed(true); // ย้ายลงถังขยะ Google Drive เพื่อประหยัดพื้นที่จัดเก็บ
+        deletedIds.push(cleanId);
+      } catch (err) {
+        Logger.log("Error trashing Drive file " + cleanId + ": " + err.message);
+        errors.push({ id: cleanId, error: err.message });
+      }
+    });
+
+    return {
+      success: true,
+      message: "ลบไฟล์รูปภาพออกจาก Google Drive สำเร็จ " + deletedIds.length + " ไฟล์",
+      deletedCount: deletedIds.length,
+      deletedIds: deletedIds,
+      errors: errors
+    };
+  } catch (error) {
+    Logger.log("Error in handleDeletePhotos: " + error.message);
+    return { success: false, message: "เกิดข้อผิดพลาดในการลบไฟล์ Drive: " + error.message };
+  }
+}
+
+function extractDriveFileId(url) {
+  if (!url || typeof url !== "string") return "";
+  const str = url.trim();
+  const m1 = str.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (m1 && m1[1]) return m1[1];
+  const m2 = str.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m2 && m2[1]) return m2[1];
+  if (/^[a-zA-Z0-9_-]{25,50}$/.test(str)) return str;
+  return "";
+}
+
+/**
+ * ฟังก์ชันลบรายงานตรวจงานประจำวัน (Daily Log) จาก Google Sheets (กรณีเชื่อมต่อตรง)
+ */
+function deleteDailyLog(formData) {
+  try {
+    const ss = getSpreadsheet();
+    const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.DAILY_LOGS);
+    if (!sheet) return { success: false, message: "ไม่พบชีต DailyLogs" };
+
+    const targetId = String(formData.logId || "").trim();
+    if (!targetId) return { success: false, message: "ไม่พบรหัส logId ที่ต้องการลบ" };
+
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === targetId) {
+        sheet.deleteRow(i + 1);
+        return { success: true, message: "ลบรายงานตรวจงานสำเร็จ" };
+      }
+    }
+    return { success: true, message: "ลบข้อมูลเรียบร้อย (ไม่พบแถวที่ตรงกันในชีต)" };
+  } catch (error) {
+    Logger.log("Error in deleteDailyLog: " + error.message);
+    return { success: false, message: "เกิดข้อผิดพลาดในการลบ Daily Log: " + error.message };
   }
 }
 
@@ -724,9 +882,10 @@ function saveNewContract(formData) {
     const endDate = String(formData.endDate || "");
     const status = String(formData.status || "Active");
     const responsibleEngineer = String(formData.responsibleEngineer || "").trim();
+    const fiscalYear = String(formData.fiscalYear || "2569").trim();
 
     const newRowIndex = sheet.getLastRow() + 1;
-    sheet.getRange(newRowIndex, 1, 1, 11).setValues([[
+    sheet.getRange(newRowIndex, 1, 1, 12).setValues([[
       contractId,
       "'" + contractNo,
       projectName,
@@ -737,7 +896,8 @@ function saveNewContract(formData) {
       startDate,
       endDate,
       status,
-      responsibleEngineer
+      responsibleEngineer,
+      fiscalYear
     ]]);
 
     return {
@@ -760,6 +920,116 @@ function saveNewContract(formData) {
  * 8. ฟังก์ชันแจ้งเตือนทางอีเมลตามระเบียบพัสดุฯ (SLA Notifications)
  * ==========================================
  */
+
+/**
+ * ==========================================
+ * 7.2 ฟังก์ชันแก้ไขข้อมูลสัญญาโครงการ (Update Contract)
+ * ==========================================
+ */
+function updateContract(formData) {
+  try {
+    const ss = getSpreadsheet();
+    let sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CONTRACT_MASTER);
+    if (!sheet) return { success: false, message: "ไม่พบชีต ContractMaster" };
+
+    const data = sheet.getDataRange().getValues();
+    const targetNo = String(formData.originalContractNo || formData.contractNo || "").trim();
+    const targetId = String(formData.contractId || "").trim();
+
+    let targetRowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      const rowId = String(data[i][0]).trim();
+      const rowNo = String(data[i][1]).trim();
+      if ((targetId && rowId === targetId) || (targetNo && (rowNo === targetNo || rowNo === "'" + targetNo))) {
+        targetRowIndex = i + 1;
+        break;
+      }
+    }
+
+    if (targetRowIndex === -1) {
+      return { success: false, message: "ไม่พบข้อมูลสัญญาที่ต้องการแก้ไข (" + targetNo + ")" };
+    }
+
+    const contractId = formData.contractId || data[targetRowIndex - 1][0];
+    const contractNo = String(formData.contractNo || "").trim();
+    const projectName = String(formData.projectName || "").trim();
+    const contractor = String(formData.contractor || "").trim();
+    const budget = Number(formData.budget || 0);
+    const contractAmount = Number(formData.contractAmount || 0);
+    const penaltyRate = Number(formData.penaltyRate || 0.001);
+    const startDate = String(formData.startDate || "");
+    const endDate = String(formData.endDate || "");
+    const status = String(formData.status || "Active");
+    const responsibleEngineer = String(formData.responsibleEngineer || "").trim();
+    const fiscalYear = String(formData.fiscalYear || "2569").trim();
+
+    sheet.getRange(targetRowIndex, 1, 1, 12).setValues([[
+      contractId,
+      "'" + contractNo,
+      projectName,
+      contractor,
+      budget,
+      contractAmount,
+      penaltyRate,
+      startDate,
+      endDate,
+      status,
+      responsibleEngineer,
+      fiscalYear
+    ]]);
+
+    return {
+      success: true,
+      message: "แก้ไขข้อมูลสัญญาโครงการเรียบร้อยแล้ว",
+      contractNo: contractNo
+    };
+  } catch (error) {
+    Logger.log("Error in updateContract: " + error.message);
+    return { success: false, message: "เกิดข้อผิดพลาดในการแก้ไขสัญญา: " + error.message };
+  }
+}
+
+/**
+ * ==========================================
+ * 7.3 ฟังก์ชันลบสัญญาโครงการ (Delete Contract)
+ * ==========================================
+ */
+function deleteContract(formData) {
+  try {
+    const ss = getSpreadsheet();
+    let sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CONTRACT_MASTER);
+    if (!sheet) return { success: false, message: "ไม่พบชีต ContractMaster" };
+
+    const data = sheet.getDataRange().getValues();
+    const targetNo = String(formData.contractNo || "").trim();
+    const targetId = String(formData.contractId || "").trim();
+
+    let targetRowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      const rowId = String(data[i][0]).trim();
+      const rowNo = String(data[i][1]).trim();
+      if ((targetId && rowId === targetId) || (targetNo && (rowNo === targetNo || rowNo === "'" + targetNo))) {
+        targetRowIndex = i + 1;
+        break;
+      }
+    }
+
+    if (targetRowIndex === -1) {
+      return { success: false, message: "ไม่พบข้อมูลสัญญาที่ต้องการลบ (" + targetNo + ")" };
+    }
+
+    sheet.deleteRow(targetRowIndex);
+
+    return {
+      success: true,
+      message: "ลบโครงการสัญญาเรียบร้อยแล้ว"
+    };
+  } catch (error) {
+    Logger.log("Error in deleteContract: " + error.message);
+    return { success: false, message: "เกิดข้อผิดพลาดในการลบสัญญา: " + error.message };
+  }
+}
+
 function sendSlaNotificationEmail(contractNo, type, details) {
   try {
     const contracts = getContracts();
@@ -945,4 +1215,36 @@ function parseDate(val) {
 
 function formatNumber(num) {
   return Number(num || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/**
+ * ========================================================================================
+ * ฟังก์ชันป้องกัน Supabase หลับ (Keep-Alive) แบบประหยัด Bandwidth สูงสุด
+ * - ดึงเพียง 1 รายการ และดึงเฉพาะฟิลด์ id (ข้อมูลที่ส่งกลับขนาดเพียง ~40-60 bytes แทบเป็น 0 MB ทั้งปี)
+ * - ส่ง Headers apikey + Authorization ถูกต้อง ทำให้ Supabase บันทึกเป็น Database Activity ทันที
+ * ========================================================================================
+ */
+function keepSupabaseAlive() {
+  const supabaseUrl = "https://qoqrhfloiahdaohitirj.supabase.co/rest/v1/contracts?select=id&limit=1";
+  const apiKey = "sb_publishable_6izuBA_alZCBXspWazUzpA_VBsgRuYT";
+
+  const options = {
+    method: "get",
+    headers: {
+      "apikey": apiKey,
+      "Authorization": "Bearer " + apiKey,
+      "Content-Type": "application/json"
+    },
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(supabaseUrl, options);
+    const code = response.getResponseCode();
+    Logger.log("Supabase Ping Status: " + code + " | Body: " + response.getContentText());
+    return { success: code >= 200 && code < 300, code: code };
+  } catch (err) {
+    Logger.log("Ping Error: " + err.toString());
+    return { success: false, error: err.toString() };
+  }
 }
