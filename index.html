@@ -2745,29 +2745,29 @@
       } catch(e) {}
     }
 
-    // Parse photo URLs supporting single string, JSON array, or comma-separated URLs
+    // Parse photo URLs supporting single string, JSON array, or comma-separated URLs (deduplicated)
     function parsePhotoUrls(photoUrl) {
       if (!photoUrl) return [];
-      if (Array.isArray(photoUrl)) return photoUrl.filter(u => u && typeof u === "string");
-      if (typeof photoUrl !== "string") return [];
-      const trimmed = photoUrl.trim();
-      if (!trimmed) return [];
-      
-      // JSON array format
-      if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (Array.isArray(parsed)) return parsed.filter(u => u && typeof u === "string");
-        } catch(e) {}
+      let list = [];
+      if (Array.isArray(photoUrl)) {
+        list = photoUrl.filter(u => u && typeof u === "string");
+      } else if (typeof photoUrl === "string") {
+        const trimmed = photoUrl.trim();
+        if (!trimmed) return [];
+        
+        // JSON array format
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) list = parsed.filter(u => u && typeof u === "string");
+          } catch(e) {}
+        } else if (trimmed.includes(",") && !trimmed.startsWith("data:image")) {
+          list = trimmed.split(",").map(s => s.trim()).filter(s => s.startsWith("http"));
+        } else {
+          list = [trimmed];
+        }
       }
-
-      // Comma-separated URLs
-      if (trimmed.includes(",") && !trimmed.startsWith("data:image")) {
-        return trimmed.split(",").map(s => s.trim()).filter(s => s.startsWith("http"));
-      }
-
-      // Single URL or legacy base64
-      return [trimmed];
+      return Array.from(new Set(list.filter(Boolean)));
     }
 
     // Extract Google Drive File IDs from URLs
@@ -3627,6 +3627,24 @@
       renderStagedPhotosUI();
     }
 
+    // Auto-clear staged photos when changing contract or resetting form
+    document.addEventListener("DOMContentLoaded", () => {
+      const contractSelect = document.getElementById("logContractNo");
+      if (contractSelect) {
+        contractSelect.addEventListener("change", () => {
+          if (currentStagedPhotos && currentStagedPhotos.length > 0) {
+            clearAllStagedPhotos();
+          }
+        });
+      }
+      const dailyForm = document.getElementById("dailyLogForm");
+      if (dailyForm) {
+        dailyForm.addEventListener("reset", () => {
+          clearAllStagedPhotos();
+        });
+      }
+    });
+
     // Alias for legacy calls
     const clearPhoto = clearAllStagedPhotos;
 
@@ -3743,6 +3761,12 @@
         .then(function(res) {
           hideLoading();
           if (res && res.success) {
+            // Clear staged photos and reset form immediately so photos never leak into subsequent logs
+            clearAllStagedPhotos();
+            document.getElementById("dailyLogForm").reset();
+            document.getElementById("inspectorName").value = inspectorName;
+            loadInitialData();
+
             Swal.fire({
               icon: "success",
               title: "บันทึกสำเร็จ!",
@@ -3750,10 +3774,6 @@
                 (uploadedPhotoUrls.length > 0 ? " (จัดเก็บรูปภาพเข้า Google Drive " + uploadedPhotoUrls.length + " รูป)" : ""),
               confirmButtonColor: "#121214"
             }).then(() => {
-              document.getElementById("dailyLogForm").reset();
-              clearAllStagedPhotos();
-              document.getElementById("inspectorName").value = inspectorName;
-              loadInitialData();
               switchSection('dashboard');
             });
           } else {
@@ -4114,6 +4134,11 @@
         renderHistoryLogs(appData.recentLogs || []);
       } else if (sectionId === "slaMonitor") {
         renderPenaltyList(appData.contracts || []);
+      } else if (sectionId === "dailyLog") {
+        const contractSelect = document.getElementById("logContractNo");
+        if (!contractSelect || !contractSelect.value) {
+          clearAllStagedPhotos();
+        }
       }
     }
 
@@ -4421,9 +4446,12 @@
       box.innerHTML = html;
     }
 
+    let lastRenderedHistoryLogs = [];
+
     function renderHistoryLogs(logs) {
       const tbody = document.getElementById("historyLogsTableBody");
       if (!tbody) return;
+      lastRenderedHistoryLogs = logs || [];
       if (!logs || logs.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">ยังไม่มีประวัติรายงาน</td></tr>';
         return;
@@ -4477,10 +4505,11 @@
     function openPhotoGalleryModal(logIndex, logId) {
       let log = null;
       if (logId) {
-        log = (appData.recentLogs || []).find(l => String(l.logId) === String(logId));
+        log = (lastRenderedHistoryLogs || []).find(l => String(l.logId) === String(logId)) ||
+              (appData.recentLogs || []).find(l => String(l.logId) === String(logId));
       }
       if (!log && logIndex !== undefined && logIndex !== null) {
-        log = (appData.recentLogs || [])[logIndex];
+        log = (lastRenderedHistoryLogs || [])[logIndex] || (appData.recentLogs || [])[logIndex];
       }
       if (!log) {
         console.warn("Daily log not found for index:", logIndex, "logId:", logId);
@@ -4495,6 +4524,14 @@
 
       currentGalleryPhotos = photos;
       currentGalleryIdx = 0;
+
+      // Clean reset visual elements before rendering new log photos
+      const mainImg = document.getElementById("galleryMainImage");
+      if (mainImg) mainImg.src = "";
+      const strip = document.getElementById("galleryThumbnailsStrip");
+      if (strip) strip.innerHTML = "";
+      const counter = document.getElementById("galleryPhotoCounter");
+      if (counter) counter.innerText = "";
 
       const subtitle = document.getElementById("gallerySubtitle");
       if (subtitle) {
